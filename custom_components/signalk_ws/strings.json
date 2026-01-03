@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Signal K WebSocket",
+        "description": "Pick a preset to prefill common paths.",
+        "data": {
+          "preset": "Preset"
+        }
+      },
+      "config": {
+        "title": "Signal K WebSocket",
+        "description": "Connect to a Signal K server and subscribe to a list of paths.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "ssl": "Use TLS (wss)",
+          "context": "Context (usually vessels.self)",
+          "period_ms": "Period (ms)",
+          "paths": "Paths (one per line)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check host, port, and TLS."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "period_ms": "Period (ms)",
+          "paths": "Paths (one per line)"
+        }
+      }
+    }
+  }
+}

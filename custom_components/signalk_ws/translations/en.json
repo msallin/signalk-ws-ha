@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Signal K WebSocket",
+        "description": "Pick a preset to prefill common paths."
+      },
+      "config": {
+        "title": "Signal K WebSocket",
+        "description": "Connect to a Signal K server and subscribe to a list of paths."
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check host, port, and TLS."
+    }
+  }
+}
