@@ -20,11 +20,13 @@ from .const import (
     CONF_PORT,
     CONF_PRESET,
     CONF_SSL,
+    CONF_VERIFY_SSL,
     DEFAULT_CONTEXT,
     DEFAULT_PATHS,
     DEFAULT_PERIOD_MS,
     DEFAULT_PORT,
     DEFAULT_SSL,
+    DEFAULT_VERIFY_SSL,
     DOMAIN,
     PRESET_BATTERIES,
     PRESET_CUSTOM,
@@ -88,6 +90,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 host,
                 user_input[CONF_PORT],
                 user_input[CONF_SSL],
+                user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
             )
             if error:
                 errors["base"] = error
@@ -96,6 +99,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_HOST: host,
                     CONF_PORT: user_input[CONF_PORT],
                     CONF_SSL: user_input[CONF_SSL],
+                    CONF_VERIFY_SSL: user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                     CONF_CONTEXT: context,
                     CONF_PERIOD_MS: user_input[CONF_PERIOD_MS],
                     CONF_PATHS: _text_to_paths(user_input[CONF_PATHS]),
@@ -108,6 +112,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_HOST): cv.string,
                 vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
                 vol.Optional(CONF_SSL, default=DEFAULT_SSL): cv.boolean,
+                vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): cv.boolean,
                 vol.Optional(CONF_CONTEXT, default=DEFAULT_CONTEXT): cv.string,
                 vol.Optional(CONF_PERIOD_MS, default=DEFAULT_PERIOD_MS): vol.Coerce(int),
                 vol.Optional(CONF_PATHS, default=_paths_to_text(preset_paths)): cv.string,
@@ -115,14 +120,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(step_id="config", data_schema=schema, errors=errors)
 
-    async def _async_validate_connection(self, host: str, port: int, use_ssl: bool) -> str | None:
+    async def _async_validate_connection(
+        self, host: str, port: int, use_ssl: bool, verify_ssl: bool
+    ) -> str | None:
         session = async_get_clientsession(self.hass)
         scheme = "wss" if use_ssl else "ws"
         url = f"{scheme}://{host}:{port}/signalk/v1/stream?subscribe=none"
+        ssl_context = None
+        if use_ssl and not verify_ssl:
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
 
         try:
             async with async_timeout.timeout(8):
-                async with session.ws_connect(url, heartbeat=30) as ws:
+                async with session.ws_connect(url, heartbeat=30, ssl=ssl_context) as ws:
                     await ws.close()
         except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError, ssl.SSLError):
             return "cannot_connect"
@@ -140,12 +152,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self._entry = config_entry
 
     async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
+        current_verify_ssl = self._entry.options.get(
+            CONF_VERIFY_SSL, self._entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+        )
         if user_input is not None:
             return self.async_create_entry(
                 title="",
                 data={
                     CONF_PERIOD_MS: user_input[CONF_PERIOD_MS],
                     CONF_PATHS: _text_to_paths(user_input[CONF_PATHS]),
+                    CONF_VERIFY_SSL: user_input.get(CONF_VERIFY_SSL, current_verify_ssl),
                 },
             )
 
@@ -160,6 +176,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             {
                 vol.Optional(CONF_PERIOD_MS, default=current_period): vol.Coerce(int),
                 vol.Optional(CONF_PATHS, default=_paths_to_text(current_paths)): cv.string,
+                vol.Optional(CONF_VERIFY_SSL, default=current_verify_ssl): cv.boolean,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

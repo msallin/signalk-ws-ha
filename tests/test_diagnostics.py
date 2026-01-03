@@ -14,6 +14,7 @@ async def test_diagnostics_redacts_host(hass) -> None:
         host="sk.local",
         port=3000,
         ssl=False,
+        verify_ssl=True,
         context="vessels.self",
         period_ms=1000,
         paths=["navigation.speedOverGround"],

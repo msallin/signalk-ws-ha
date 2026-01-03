@@ -3,6 +3,7 @@ DOMAIN = "signalk_ws"
 CONF_HOST = "host"
 CONF_PORT = "port"
 CONF_SSL = "ssl"
+CONF_VERIFY_SSL = "verify_ssl"
 CONF_CONTEXT = "context"
 CONF_PATHS = "paths"
 CONF_PERIOD_MS = "period_ms"
@@ -10,6 +11,7 @@ CONF_PRESET = "preset"
 
 DEFAULT_PORT = 3000
 DEFAULT_SSL = False
+DEFAULT_VERIFY_SSL = True
 DEFAULT_CONTEXT = "vessels.self"
 DEFAULT_PERIOD_MS = 1000
 

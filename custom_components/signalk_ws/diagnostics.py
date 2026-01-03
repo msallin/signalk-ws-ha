@@ -30,6 +30,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             "host": _redact_host(cfg.host),
             "port": cfg.port,
             "ssl": cfg.ssl,
+            "verify_ssl": cfg.verify_ssl,
             "context": cfg.context,
             "period_ms": cfg.period_ms,
             "paths": list(cfg.paths),

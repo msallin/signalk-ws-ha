@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import random
+import ssl
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -23,6 +24,8 @@ from .const import (
     CONF_PERIOD_MS,
     CONF_PORT,
     CONF_SSL,
+    CONF_VERIFY_SSL,
+    DEFAULT_VERIFY_SSL,
 )
 from .parser import extract_values
 from .subscription import build_subscribe_payload
@@ -49,6 +52,7 @@ class SignalKConfig:
     host: str
     port: int
     ssl: bool
+    verify_ssl: bool
     context: str
     period_ms: int
     paths: list[str]
@@ -89,11 +93,13 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         paths = opts.get(CONF_PATHS, data.get(CONF_PATHS, []))
         period_ms = opts.get(CONF_PERIOD_MS, data.get(CONF_PERIOD_MS, 1000))
+        verify_ssl = opts.get(CONF_VERIFY_SSL, data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL))
 
         return SignalKConfig(
             host=data[CONF_HOST],
             port=data[CONF_PORT],
             ssl=data[CONF_SSL],
+            verify_ssl=bool(verify_ssl),
             context=data[CONF_CONTEXT],
             period_ms=int(period_ms),
             paths=list(paths),
@@ -163,6 +169,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             cfg = self.config
             scheme = "wss" if cfg.ssl else "ws"
             url = f"{scheme}://{cfg.host}:{cfg.port}/signalk/v1/stream?subscribe=none"
+            ssl_context = self._build_ssl_context(cfg)
 
             self._set_state(ConnectionState.CONNECTING)
             try:
@@ -171,6 +178,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     url,
                     heartbeat=30,
                     timeout=ClientTimeout(total=10),
+                    ssl=ssl_context,
                 ) as ws:
                     self._ws = ws
                     backoff = _BACKOFF_MIN
@@ -216,6 +224,15 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             backoff = min(backoff * 2.0, _BACKOFF_MAX)
 
         self._set_state(ConnectionState.DISCONNECTED)
+
+    @staticmethod
+    def _build_ssl_context(cfg: SignalKConfig) -> ssl.SSLContext | None:
+        if not cfg.ssl or cfg.verify_ssl:
+            return None
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
 
     async def _send_subscribe(self, ws, cfg: SignalKConfig) -> None:
         payload = build_subscribe_payload(cfg.context, cfg.paths, cfg.period_ms)
