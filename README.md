@@ -38,6 +38,8 @@ Diagnostic sensors are created for:
 
 - Verify the REST URL is reachable in a browser or `curl`.
 - If you use a self-signed certificate, disable "Verify TLS certificate".
+- If authentication is required, approve the access request in Signal K and wait for Home Assistant to continue automatically.
+- If approval times out, reopen the config flow to retry the access request.
 - Use the Diagnostics panel for connection state, counters, and last update timestamps.
 - Reload the integration after connection settings change.
 

@@ -8,16 +8,16 @@
           "host": "Host",
           "port": "Port",
           "ssl": "Use TLS (https/wss)",
-          "verify_ssl": "Verify TLS certificate"
+          "verify_ssl": "Verify TLS certificate (disable for self-signed)"
         }
       },
       "auth": {
         "title": "Signal K Authorization",
-        "description": "This Signal K server requires approval. Open {approval_url} and approve the access request. Home Assistant continues automatically once approved."
+        "description": "This Signal K server requires approval. Open {approval_url} (or the Signal K admin UI) and approve the access request. Home Assistant continues automatically once approved."
       }
     },
     "progress": {
-      "auth": "Waiting for approval. Open {approval_url} and approve the access request."
+      "auth": "Waiting for approval. Open {approval_url} (or the Signal K admin UI) and approve the access request."
     },
     "error": {
       "cannot_connect": "Failed to connect. Check host, port, and TLS.",
