@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_registry import EVENT_ENTITY_REGISTRY_UPDATED
@@ -35,6 +36,7 @@ from .rest import normalize_base_url, normalize_ws_url
 from .runtime import SignalKRuntimeData
 
 PLATFORMS: list[str] = ["sensor", "geo_location"]
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -50,9 +52,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         auth=auth,
     )
 
-    await discovery.async_config_entry_first_refresh()
-    if not discovery.last_update_success:
-        raise ConfigEntryNotReady("Signal K discovery failed")
+    async def _async_start_discovery() -> None:
+        try:
+            await discovery.async_config_entry_first_refresh()
+        except Exception as err:  # pragma: no cover - defensive
+            _LOGGER.warning("Signal K discovery failed during startup: %s", err)
+
+    hass.async_create_task(_async_start_discovery())
     await coordinator.async_start()
 
     entry.async_on_unload(entry.add_update_listener(_async_entry_updated))
