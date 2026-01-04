@@ -64,6 +64,7 @@ async def test_geo_location_updates(hass, enable_custom_integrations) -> None:
 
     assert geo.latitude == 1.0
     assert geo.longitude == 2.0
+    assert geo.distance == 0.0
     assert geo.available is True
     attrs = geo.state_attributes
     assert attrs["description"] == "Vessel position"

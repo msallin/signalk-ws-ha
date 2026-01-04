@@ -132,6 +132,12 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         return float(value) if value is not None else None
 
     @property
+    def distance(self) -> float | None:
+        if self.latitude is None or self.longitude is None:
+            return None
+        return 0.0
+
+    @property
     def state_attributes(self) -> dict[str, Any]:
         data = super().state_attributes
         data["path"] = SK_PATH_POSITION
