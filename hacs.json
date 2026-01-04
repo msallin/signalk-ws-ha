@@ -1,7 +1,7 @@
 {
-  "name": "Signal K WebSocket",
+  "name": "Signal K HA",
   "content_in_root": false,
-  "domains": ["signalk_ws"],
+  "domains": ["signalk_ha"],
   "zip_release": false,
   "render_readme": true
 }

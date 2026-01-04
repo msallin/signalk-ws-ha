@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Signal K",
+        "description": "Connect to a Signal K server.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "ssl": "Use TLS (https/wss)",
+          "verify_ssl": "Verify TLS certificate"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check host, port, and TLS.",
+      "invalid_response": "Signal K response was invalid."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "refresh_interval_hours": "Discovery refresh interval (hours)"
+        }
+      }
+    }
+  }
+}

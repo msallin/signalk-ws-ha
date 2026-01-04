@@ -1,6 +1,6 @@
 import ssl
 
-from custom_components.signalk_ws.coordinator import SignalKConfig, SignalKCoordinator
+from custom_components.signalk_ha.coordinator import SignalKConfig, SignalKCoordinator
 
 
 def test_build_ssl_context_disabled() -> None:
@@ -9,18 +9,10 @@ def test_build_ssl_context_disabled() -> None:
         port=3000,
         ssl=True,
         verify_ssl=False,
-        context="vessels.self",
+        base_url="http://sk.local:3000/signalk/v1/api/",
+        ws_url="wss://sk.local:3000/signalk/v1/stream?subscribe=none",
+        vessel_id="mmsi:261006533",
         vessel_name="ONA",
-        period_ms=1000,
-        paths=["navigation.speedOverGround"],
-        subscriptions=[
-            {
-                "path": "navigation.speedOverGround",
-                "period": 1000,
-                "format": "delta",
-                "policy": "ideal",
-            }
-        ],
     )
 
     context = SignalKCoordinator._build_ssl_context(cfg)
@@ -35,18 +27,10 @@ def test_build_ssl_context_default() -> None:
         port=3000,
         ssl=True,
         verify_ssl=True,
-        context="vessels.self",
+        base_url="http://sk.local:3000/signalk/v1/api/",
+        ws_url="wss://sk.local:3000/signalk/v1/stream?subscribe=none",
+        vessel_id="mmsi:261006533",
         vessel_name="ONA",
-        period_ms=1000,
-        paths=["navigation.speedOverGround"],
-        subscriptions=[
-            {
-                "path": "navigation.speedOverGround",
-                "period": 1000,
-                "format": "delta",
-                "policy": "ideal",
-            }
-        ],
     )
 
     assert SignalKCoordinator._build_ssl_context(cfg) is None
@@ -58,18 +42,10 @@ def test_build_ssl_context_no_tls() -> None:
         port=3000,
         ssl=False,
         verify_ssl=False,
-        context="vessels.self",
+        base_url="http://sk.local:3000/signalk/v1/api/",
+        ws_url="ws://sk.local:3000/signalk/v1/stream?subscribe=none",
+        vessel_id="mmsi:261006533",
         vessel_name="ONA",
-        period_ms=1000,
-        paths=["navigation.speedOverGround"],
-        subscriptions=[
-            {
-                "path": "navigation.speedOverGround",
-                "period": 1000,
-                "format": "delta",
-                "policy": "ideal",
-            }
-        ],
     )
 
     assert SignalKCoordinator._build_ssl_context(cfg) is None

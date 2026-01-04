@@ -1,27 +1,26 @@
-# Signal K WebSocket (signalk_ws)
+# Signal K (signalk_ha)
 
-Signal K WebSocket integration for Home Assistant. It connects to a Signal K server, subscribes to delta updates, and exposes paths as sensors with automatic reconnects and diagnostics.
+Signal K integration for Home Assistant. It discovers available data via REST and subscribes to live updates over WebSocket deltas.
 
 ## Quickstart
 
 1. Install via HACS (custom repository if needed).
-2. Add the integration from Home Assistant UI.
-3. Pick a preset to prefill common paths.
-4. Enter host, port, TLS, context, and period.
-5. Save and verify sensors update within 30 seconds.
+2. Add the integration from the Home Assistant UI.
+3. Enter host, port, TLS, and certificate verification settings.
+4. The integration fetches `/signalk/v1/api/vessels/self` and creates entities (disabled by default).
+5. Enable the entities you want in the entity registry and wait for updates.
 
-## Configuration notes
+## How it works
 
+- REST discovery runs on startup and every 24 hours (configurable in Options).
 - WebSocket endpoint is fixed: `/signalk/v1/stream?subscribe=none`.
-- After connect, the integration sends a subscription payload with `format=delta` and `policy=ideal`.
-- Each subscription can override `period`, `format`, `policy`, and `minPeriod`.
-- Wildcard paths (for example `navigation.*`) create sensors dynamically as matching data arrives.
-- When `navigation.position` is subscribed, a Geo Location entity is created for map display.
-- If you use a self-signed certificate, disable "Verify TLS certificate".
+- The integration subscribes only to enabled entity paths using `format=delta` and `policy=ideal`.
+- `navigation.position` is exposed as a Geo Location entity.
+- Entities are never deleted automatically; missing paths become unavailable with `last_seen`.
 
 ## Health sensors
 
-The integration exposes health sensors for:
+Diagnostic sensors are created for:
 
 - Connection state
 - Last message timestamp
@@ -30,7 +29,7 @@ The integration exposes health sensors for:
 
 ## Troubleshooting
 
-- Verify the host/port and TLS match your Signal K server.
-- Check Home Assistant logs for rate-limited parse errors or reconnect warnings.
-- Use the Diagnostics panel for connection state, counters, and last-update timestamps per path.
-- If you changed paths or period, reload the integration from the UI.
+- Verify the REST URL is reachable in a browser or `curl`.
+- If you use a self-signed certificate, disable "Verify TLS certificate".
+- Use the Diagnostics panel for connection state, counters, and last update timestamps.
+- Reload the integration after connection settings change.

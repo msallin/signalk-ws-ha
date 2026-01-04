@@ -1,0 +1,12 @@
+{
+  "domain": "signalk_ha",
+  "name": "Signal K",
+  "version": "0.1.0",
+  "documentation": "https://github.com/msallin/signalk-ha",
+  "issue_tracker": "https://github.com/msallin/signalk-ha/issues",
+  "codeowners": ["@msallin"],
+  "config_flow": true,
+  "diagnostics": true,
+  "requirements": [],
+  "iot_class": "local_push"
+}

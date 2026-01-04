@@ -1,99 +1,68 @@
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.signalk_ws.const import (
-    CONF_CONTEXT,
+from custom_components.signalk_ha.const import (
+    CONF_BASE_URL,
     CONF_HOST,
-    CONF_PERIOD_MS,
     CONF_PORT,
     CONF_SSL,
-    CONF_SUBSCRIPTIONS,
+    CONF_VERIFY_SSL,
+    CONF_VESSEL_ID,
+    CONF_VESSEL_NAME,
+    CONF_WS_URL,
     DOMAIN,
 )
-from custom_components.signalk_ws.coordinator import ConnectionState
+from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoordinator
+from custom_components.signalk_ha.discovery import DiscoveredEntity, DiscoveryResult
+from custom_components.signalk_ha.sensor import SignalKSensor
+
+
+def _make_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "sk.local",
+            CONF_PORT: 3000,
+            CONF_SSL: False,
+            CONF_VERIFY_SSL: True,
+            CONF_BASE_URL: "http://sk.local:3000/signalk/v1/api/",
+            CONF_WS_URL: "ws://sk.local:3000/signalk/v1/stream?subscribe=none",
+            CONF_VESSEL_ID: "mmsi:261006533",
+            CONF_VESSEL_NAME: "ONA",
+        },
+    )
 
 
 async def test_coordinator_updates_sensor_state(hass, enable_custom_integrations) -> None:
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_HOST: "sk.local",
-            CONF_PORT: 3000,
-            CONF_SSL: False,
-            CONF_CONTEXT: "vessels.self",
-            CONF_PERIOD_MS: 1000,
-            CONF_SUBSCRIPTIONS: [
-                {
-                    "path": "navigation.speedOverGround",
-                    "period": 1000,
-                    "format": "delta",
-                    "policy": "ideal",
-                }
-            ],
-        },
-    )
+    entry = _make_entry()
     entry.add_to_hass(hass)
 
-    with patch(
-        "custom_components.signalk_ws.coordinator.SignalKCoordinator.async_start",
-        new=AsyncMock(),
-    ):
-        assert await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    coordinator._set_state(ConnectionState.CONNECTED)
-    coordinator.async_set_updated_data({"navigation.speedOverGround": 5.5})
-    await hass.async_block_till_done()
-
-    unique_id = f"{DOMAIN}:sk.local:3000:vessels.self:navigation.speedOverGround"
-    registry = er.async_get(hass)
-    entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
-    assert entity_id is not None
-
-    state = hass.states.get(entity_id)
-    assert state is not None
-    assert state.state == "5.5"
-
-
-async def test_wildcard_subscription_creates_dynamic_sensor(
-    hass, enable_custom_integrations
-) -> None:
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_HOST: "sk.local",
-            CONF_PORT: 3000,
-            CONF_SSL: False,
-            CONF_CONTEXT: "vessels.self",
-            CONF_PERIOD_MS: 1000,
-            CONF_SUBSCRIPTIONS: [
-                {
-                    "path": "navigation.*",
-                    "period": 1000,
-                    "format": "delta",
-                    "policy": "ideal",
-                }
-            ],
-        },
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit="kn",
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+        description="Speed over ground",
     )
-    entry.add_to_hass(hass)
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock())
+    coordinator._state = ConnectionState.CONNECTED
+    coordinator.data = {"navigation.speedOverGround": 5.5}
+    coordinator._last_update_by_path["navigation.speedOverGround"] = dt_util.utcnow()
+    coordinator._last_source_by_path["navigation.speedOverGround"] = "src1"
 
-    with patch(
-        "custom_components.signalk_ws.coordinator.SignalKCoordinator.async_start",
-        new=AsyncMock(),
-    ):
-        assert await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
 
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    coordinator._set_state(ConnectionState.CONNECTED)
-    coordinator.async_set_updated_data({"navigation.position": {"latitude": 1, "longitude": 2}})
-    await hass.async_block_till_done()
-
-    unique_id = f"{DOMAIN}:sk.local:3000:vessels.self:navigation.position"
-    registry = er.async_get(hass)
-    entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
-    assert entity_id is not None
+    assert sensor.native_value == 5.5
+    assert sensor.available is True
+    attrs = sensor.extra_state_attributes
+    assert attrs["description"] == "Speed over ground"
+    assert attrs["source"] == "src1"

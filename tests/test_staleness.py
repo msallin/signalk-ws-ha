@@ -1,3 +1,4 @@
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -13,11 +14,12 @@ from custom_components.signalk_ha.const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     CONF_WS_URL,
+    DEFAULT_STALE_SECONDS,
     DOMAIN,
 )
 from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoordinator
 from custom_components.signalk_ha.discovery import DiscoveredEntity, DiscoveryResult
-from custom_components.signalk_ha.geo_location import SignalKPositionGeolocation
+from custom_components.signalk_ha.sensor import SignalKSensor
 
 
 def _make_entry() -> MockConfigEntry:
@@ -36,34 +38,33 @@ def _make_entry() -> MockConfigEntry:
     )
 
 
-async def test_geo_location_updates(hass, enable_custom_integrations) -> None:
+async def test_sensor_staleness_transitions(hass, enable_custom_integrations) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
 
+    path = "navigation.speedOverGround"
     spec = DiscoveredEntity(
-        path="navigation.position",
-        name="Position",
-        kind="geo_location",
-        unit=None,
+        path=path,
+        name="Speed Over Ground",
+        kind="sensor",
+        unit="kn",
         device_class=None,
         state_class=None,
         conversion=None,
-        tolerance=0.00001,
+        tolerance=None,
         min_update_seconds=None,
-        description="Vessel position",
     )
     discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock())
     coordinator._state = ConnectionState.CONNECTED
-    coordinator.data = {"navigation.position": {"latitude": 1.0, "longitude": 2.0}}
-    coordinator._last_update_by_path["navigation.position"] = dt_util.utcnow()
-    coordinator._last_source_by_path["navigation.position"] = "src1"
+    coordinator.data = {path: 5.5}
 
-    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
 
-    assert geo.latitude == 1.0
-    assert geo.longitude == 2.0
-    assert geo.available is True
-    attrs = geo.state_attributes
-    assert attrs["description"] == "Vessel position"
-    assert attrs["source"] == "src1"
+    coordinator._last_update_by_path[path] = dt_util.utcnow() - timedelta(
+        seconds=DEFAULT_STALE_SECONDS + 1
+    )
+    assert sensor.available is False
+
+    coordinator._last_update_by_path[path] = dt_util.utcnow()
+    assert sensor.available is True

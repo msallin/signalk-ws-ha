@@ -1,60 +1,15 @@
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-from custom_components.signalk_ws.config_flow import _entry_subscriptions
-from custom_components.signalk_ws.const import (
-    CONF_CONTEXT,
-    CONF_HOST,
-    CONF_PATHS,
-    CONF_PERIOD_MS,
-    CONF_PORT,
-    CONF_SSL,
-    CONF_SUBSCRIPTIONS,
-    DOMAIN,
-)
+from custom_components.signalk_ha.rest import normalize_host_input
 
 
-def test_entry_subscriptions_falls_back_to_paths() -> None:
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_HOST: "sk.local",
-            CONF_PORT: 3000,
-            CONF_SSL: False,
-            CONF_CONTEXT: "vessels.self",
-            CONF_PERIOD_MS: 1500,
-            CONF_PATHS: ["navigation.speedOverGround"],
-        },
-    )
-
-    subs = _entry_subscriptions(entry)
-    assert subs == [
-        {
-            "path": "navigation.speedOverGround",
-            "period": 1500,
-            "format": "delta",
-            "policy": "ideal",
-        }
-    ]
+def test_normalize_host_input_with_scheme() -> None:
+    host, port, scheme = normalize_host_input("https://Sk.Local:1234")
+    assert host == "sk.local"
+    assert port == 1234
+    assert scheme == "https"
 
 
-def test_entry_subscriptions_prefers_subscription_list() -> None:
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_HOST: "sk.local",
-            CONF_PORT: 3000,
-            CONF_SSL: False,
-            CONF_CONTEXT: "vessels.self",
-            CONF_SUBSCRIPTIONS: [
-                {
-                    "path": "navigation.speedOverGround",
-                    "period": 1000,
-                    "format": "delta",
-                    "policy": "ideal",
-                }
-            ],
-        },
-    )
-
-    subs = _entry_subscriptions(entry)
-    assert subs[0]["path"] == "navigation.speedOverGround"
+def test_normalize_host_input_without_scheme() -> None:
+    host, port, scheme = normalize_host_input("sk.local")
+    assert host == "sk.local"
+    assert port is None
+    assert scheme is None

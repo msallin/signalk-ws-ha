@@ -1,0 +1,30 @@
+from __future__ import annotations
+
+from typing import Any, Iterable
+
+from .const import DEFAULT_FORMAT, DEFAULT_POLICY
+
+
+def build_subscribe_payload(
+    context: str,
+    subscriptions: Iterable[dict[str, Any]],
+    *,
+    fmt: str = DEFAULT_FORMAT,
+    policy: str = DEFAULT_POLICY,
+) -> dict[str, Any]:
+    subscribe: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in subscriptions:
+        if not isinstance(raw, dict):
+            continue
+        path = str(raw.get("path", "")).strip()
+        if not path or path.startswith("#"):
+            continue
+        if path in seen:
+            continue
+        period = raw.get("period")
+        if period is None:
+            continue
+        subscribe.append({"path": path, "period": int(period), "format": fmt, "policy": policy})
+        seen.add(path)
+    return {"context": context, "subscribe": subscribe}

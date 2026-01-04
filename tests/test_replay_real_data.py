@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from custom_components.signalk_ws.parser import parse_delta_text
+from custom_components.signalk_ha.parser import parse_delta_text
 
 
 def test_replay_signalk_messages_do_not_break() -> None:
@@ -13,7 +13,7 @@ def test_replay_signalk_messages_do_not_break() -> None:
             if not text:
                 continue
             count += 1
-            result = parse_delta_text(text, "vessels.self")
+            result = parse_delta_text(text, ["vessels.self"])
             assert isinstance(result, dict), f"Line {line_number} should return dict"
 
     assert count > 0, "testdata.json should contain at least one message"

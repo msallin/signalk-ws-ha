@@ -1,0 +1,31 @@
+DOMAIN = "signalk_ha"
+
+CONF_HOST = "host"
+CONF_PORT = "port"
+CONF_SSL = "ssl"
+CONF_VERIFY_SSL = "verify_ssl"
+CONF_BASE_URL = "base_url"
+CONF_WS_URL = "ws_url"
+CONF_VESSEL_ID = "vessel_id"
+CONF_VESSEL_NAME = "vessel_name"
+CONF_INSTANCE_ID = "instance_id"
+CONF_REFRESH_INTERVAL_HOURS = "refresh_interval_hours"
+
+DEFAULT_PORT = 3000
+DEFAULT_SSL = False
+DEFAULT_VERIFY_SSL = True
+DEFAULT_REFRESH_INTERVAL_HOURS = 24
+
+DEFAULT_PERIOD_MS = 5000
+DEFAULT_FORMAT = "delta"
+DEFAULT_POLICY = "ideal"
+
+DEFAULT_MIN_UPDATE_SECONDS = 5.0
+DEFAULT_STALE_SECONDS = 300.0
+
+SK_PATH_POSITION = "navigation.position"
+
+HEALTH_SENSOR_CONNECTION_STATE = "connection_state"
+HEALTH_SENSOR_LAST_MESSAGE = "last_message"
+HEALTH_SENSOR_RECONNECT_COUNT = "reconnect_count"
+HEALTH_SENSOR_LAST_ERROR = "last_error"

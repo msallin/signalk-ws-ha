@@ -1,7 +1,7 @@
 import asyncio
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_socket
@@ -24,15 +24,9 @@ def event_loop_policy():
 
 
 @pytest.fixture(autouse=True)
-def _mock_aiohttp_session():
-    with (
-        patch(
-            "custom_components.signalk_ws.coordinator.async_get_clientsession",
-            return_value=Mock(),
-        ),
-        patch(
-            "custom_components.signalk_ws.coordinator.SignalKCoordinator.async_start",
-            new=AsyncMock(),
-        ),
+def _mock_ws_start():
+    with patch(
+        "custom_components.signalk_ha.coordinator.SignalKCoordinator.async_start",
+        new=AsyncMock(),
     ):
         yield

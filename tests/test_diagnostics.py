@@ -2,31 +2,19 @@ from types import SimpleNamespace
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.signalk_ws.const import DOMAIN
-from custom_components.signalk_ws.diagnostics import async_get_config_entry_diagnostics
+from custom_components.signalk_ha.const import DOMAIN
+from custom_components.signalk_ha.diagnostics import async_get_config_entry_diagnostics
 
 
-async def test_diagnostics_redacts_host(hass) -> None:
+async def test_diagnostics_redacts_urls(hass) -> None:
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
 
     cfg = SimpleNamespace(
-        host="sk.local",
-        port=3000,
-        ssl=False,
-        verify_ssl=True,
-        context="vessels.self",
+        base_url="http://sk.local:3000/signalk/v1/api/",
+        ws_url="ws://sk.local:3000/signalk/v1/stream?subscribe=none",
+        vessel_id="mmsi:261006533",
         vessel_name="ONA",
-        period_ms=1000,
-        paths=["navigation.speedOverGround"],
-        subscriptions=[
-            {
-                "path": "navigation.speedOverGround",
-                "period": 1000,
-                "format": "delta",
-                "policy": "ideal",
-            }
-        ],
     )
     coordinator = SimpleNamespace(
         config=cfg,
@@ -36,8 +24,15 @@ async def test_diagnostics_redacts_host(hass) -> None:
         reconnect_count=0,
         last_message=None,
         last_update_by_path={},
+        last_backoff=0.0,
+        subscribed_paths=[],
     )
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    discovery = SimpleNamespace(conflicts=[], last_refresh=None)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        "coordinator": coordinator,
+        "discovery": discovery,
+    }
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
-    assert diagnostics["config"]["host"] == "<redacted>"
+    assert diagnostics["config"]["rest_url"] == "<redacted>"
+    assert diagnostics["config"]["ws_url"] == "<redacted>"
