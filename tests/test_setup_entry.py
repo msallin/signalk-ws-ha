@@ -66,16 +66,11 @@ async def test_setup_entry_sets_runtime_data_and_subscriptions(hass) -> None:
         config_entry=entry,
     )
 
-    created = []
-
-    def _create_task(coro):
-        created.append(coro)
-        coro.close()
-
+    refresh = AsyncMock()
     with (
         patch(
             "custom_components.signalk_ha.__init__.SignalKDiscoveryCoordinator.async_config_entry_first_refresh",
-            new=AsyncMock(),
+            new=refresh,
         ),
         patch(
             "custom_components.signalk_ha.async_get_clientsession",
@@ -89,30 +84,24 @@ async def test_setup_entry_sets_runtime_data_and_subscriptions(hass) -> None:
             "custom_components.signalk_ha.__init__.SignalKCoordinator.async_update_paths",
             new=AsyncMock(),
         ) as update_paths,
-        patch.object(hass, "async_create_task", side_effect=_create_task),
         patch.object(hass.config_entries, "async_forward_entry_setups", new=AsyncMock()),
     ):
         assert await async_setup_entry(hass, entry) is True
 
     runtime = entry.runtime_data
     assert isinstance(runtime, SignalKRuntimeData)
+    refresh.assert_awaited_once()
     update_paths.assert_called_once()
 
 
-async def test_setup_entry_schedules_discovery_refresh(hass) -> None:
+async def test_setup_entry_continues_on_discovery_error(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
-
-    created = []
-
-    def _create_task(coro):
-        created.append(coro)
-        coro.close()
 
     with (
         patch(
             "custom_components.signalk_ha.__init__.SignalKDiscoveryCoordinator.async_config_entry_first_refresh",
-            new=AsyncMock(),
+            new=AsyncMock(side_effect=RuntimeError("boom")),
         ),
         patch(
             "custom_components.signalk_ha.async_get_clientsession",
@@ -122,12 +111,9 @@ async def test_setup_entry_schedules_discovery_refresh(hass) -> None:
             "custom_components.signalk_ha.__init__.SignalKCoordinator.async_start",
             new=AsyncMock(),
         ),
-        patch.object(hass, "async_create_task", side_effect=_create_task),
         patch.object(hass.config_entries, "async_forward_entry_setups", new=AsyncMock()),
     ):
         assert await async_setup_entry(hass, entry) is True
-
-    assert created
 
 
 async def test_unload_entry_stops_runtime(hass) -> None:

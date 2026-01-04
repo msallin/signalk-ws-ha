@@ -14,6 +14,7 @@ def build_subscribe_payload(
 ) -> dict[str, Any]:
     subscribe: list[dict[str, Any]] = []
     seen: set[str] = set()
+    # Include minPeriod to request server-side throttling before HA sees any deltas.
     for raw in subscriptions:
         if not isinstance(raw, dict):
             continue

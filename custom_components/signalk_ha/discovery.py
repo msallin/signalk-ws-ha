@@ -63,6 +63,7 @@ class DiscoveryResult:
 def discover_entities(data: dict[str, Any], scopes: Iterable[str]) -> DiscoveryResult:
     entities: list[DiscoveredEntity] = []
     conflicts: list[MetadataConflict] = []
+    # Treat REST discovery as a snapshot; it is safe to re-run and merge without deleting.
     for scope in scopes:
         node = data.get(scope)
         if isinstance(node, dict):
@@ -76,6 +77,7 @@ def _walk(
     entities: list[DiscoveredEntity],
     conflicts: list[MetadataConflict],
 ) -> None:
+    # Only leaf values become entities; intermediate nodes remain structural.
     if "value" in node:
         _add_entity(prefix, node, entities, conflicts)
 

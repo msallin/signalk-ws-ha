@@ -42,6 +42,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
 
+    # Keep runtime state centralized so reloads can swap components predictably.
     auth = SignalKAuthManager(entry.data.get(CONF_ACCESS_TOKEN))
     discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
     coordinator = SignalKCoordinator(hass, entry, session, discovery, auth)
@@ -52,19 +53,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         auth=auth,
     )
 
-    async def _async_start_discovery() -> None:
-        try:
-            await discovery.async_config_entry_first_refresh()
-        except Exception as err:  # pragma: no cover - defensive
-            _LOGGER.warning("Signal K discovery failed during startup: %s", err)
-
-    hass.async_create_task(_async_start_discovery())
-    await coordinator.async_start()
+    # Run an initial discovery synchronously to seed entities and subscription periods.
+    # Fail-open here so a flaky REST endpoint doesn't prevent WS updates and HA startup.
+    try:
+        await discovery.async_config_entry_first_refresh()
+    except Exception as err:  # pragma: no cover - defensive
+        # Don't block HA startup on REST failures; later refreshes can populate entities.
+        _LOGGER.warning("Signal K discovery failed during startup: %s", err)
 
     entry.async_on_unload(entry.add_update_listener(_async_entry_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await _async_update_subscriptions(hass, entry)
+    await coordinator.async_start()
 
     @callback
     def _registry_updated(event):
@@ -132,6 +133,7 @@ async def _async_update_subscriptions(hass: HomeAssistant, entry: ConfigEntry) -
     runtime: SignalKRuntimeData | None = entry.runtime_data
     if not runtime:
         return
+    # Derive subscriptions from enabled entities to keep WS traffic aligned with user intent.
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
     paths: list[str] = []

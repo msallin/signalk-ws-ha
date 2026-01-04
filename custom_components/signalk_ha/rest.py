@@ -34,7 +34,8 @@ async def async_fetch_vessel_self(
     ssl_context = build_ssl_param(verify_ssl)
     headers = build_auth_headers(token)
 
-    async with async_timeout.timeout(10):
+    # Keep REST discovery snappy to avoid blocking HA startup on slow servers.
+    async with async_timeout.timeout(5):
         async with session.get(url, ssl=ssl_context, headers=headers) as resp:
             if resp.status in (401, 403):
                 raise AuthRequired("Authentication required")

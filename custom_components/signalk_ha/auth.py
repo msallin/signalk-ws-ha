@@ -176,6 +176,7 @@ async def async_poll_access_request(
 ) -> str:
     start = time.monotonic()
     delay_index = 0
+    # Poll with backoff to avoid hammering the server while still feeling responsive.
     while True:
         data = await async_fetch_access_request(session, base_url, verify_ssl, request)
         token = _extract_token(data)

@@ -301,7 +301,13 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._task is not None:
             return
         self._stop_event.clear()
-        self._task = self.hass.async_create_task(self._run())
+        # Keep the WS loop off the bootstrap task graph; it is intentionally long-lived.
+        if hasattr(self.hass, "async_create_background_task"):
+            self._task = self.hass.async_create_background_task(
+                self._run(), name=f"signalk_ha_ws_{self._entry.entry_id}"
+            )
+        else:
+            self._task = self.hass.async_create_task(self._run())
         self._schedule_stale_checks()
 
     async def async_stop(self) -> None:
@@ -346,6 +352,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _run(self) -> None:
         backoff = _BACKOFF_MIN
+        # WS loop isolates transport concerns from HA state updates and recovery logic.
         while not self._stop_event.is_set():
             cfg = self.config
             url = cfg.ws_url
@@ -448,6 +455,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         changed = extract_values(obj, contexts)
         notifications = extract_notifications(obj, contexts)
         if notifications:
+            # Keep notifications out of the sensor cache; they have their own event pipeline.
             if self._notifications_enabled():
                 for notification in notifications:
                     self._fire_notification(notification, cfg)

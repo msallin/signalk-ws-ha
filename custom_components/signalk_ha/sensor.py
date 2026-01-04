@@ -196,6 +196,7 @@ class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
 
         now = time.monotonic()
         min_interval = self._min_update_seconds()
+        # Enforce a minimum write interval to protect the recorder/UI from WS bursts.
         if now - self._last_write < min_interval:
             return False
 

@@ -8,6 +8,7 @@ from homeassistant.util import dt as dt_util
 def _redact_url(url: str) -> str:
     if not url:
         return url
+    # Diagnostics should be shareable without exposing endpoints or credentials.
     return "<redacted>"
 
 
