@@ -44,22 +44,26 @@ When "Enable Signal K notification events" is on (default), notifications are em
 
 Example automation (anchor alarm):
 
+Signal K publishes anchor alarms under `notifications.navigation.anchor` with states like `warn`, `alarm`, or `emergency`. The following automation creates a persistent notification in Home Assistant when such an alarm is received.
+
 ```yaml
 alias: Signal K Anchor Alarm
-trigger:
-  - platform: event
-    event_type: signalk_ha_notification
+description: ""
+mode: single
+triggers:
+  - event_type: signalk_ha_notification
     event_data:
       path: notifications.navigation.anchor
-action:
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ trigger.event.data.state == 'alert' }}"
-        sequence:
-          - service: notify.notify
-            data:
-              message: "Anchor alarm: {{ trigger.event.data.message }}"
+    trigger: event
+conditions:
+  - condition: template
+    value_template: |
+      {{ trigger.event.data.state in ['warn', 'alarm', 'emergency'] }}
+actions:
+  - action: persistent_notification.create
+    metadata: {}
+    data:
+      message: "{{ trigger.event.data.message }}"
 ```
 
 ## Troubleshooting
