@@ -2,6 +2,7 @@ import json
 
 from custom_components.signalk_ha.parser import (
     _context_matches,
+    extract_notifications,
     extract_sources,
     extract_values,
     parse_delta_text,
@@ -150,6 +151,17 @@ def test_context_urn_matches_full_context() -> None:
     assert extract_values(payload, ["urn:mrn:imo:mmsi:123456789"]) == {"p": 1}
 
 
+def test_context_mmsi_empty_returns_false() -> None:
+    assert _context_matches("mmsi:", "vessels.self") is False
+
+
+def test_context_urn_mismatch_returns_false() -> None:
+    assert (
+        _context_matches("urn:mrn:imo:mmsi:123456789", "vessels.urn:mrn:imo:mmsi:987654321")
+        is False
+    )
+
+
 def test_extract_sources_from_update() -> None:
     payload = {
         "context": "vessels.self",
@@ -195,3 +207,86 @@ def test_extract_sources_context_mismatch() -> None:
         "updates": [{"values": [{"path": "p", "$source": "src"}]}],
     }
     assert extract_sources(payload, ["vessels.self"]) == {}
+
+
+def test_extract_sources_values_not_list() -> None:
+    payload = {"updates": [{"values": "bad"}]}
+    assert extract_sources(payload, None) == {}
+
+
+def test_extract_sources_path_not_string() -> None:
+    payload = {"updates": [{"$source": "src", "values": [{"path": 123, "$source": "s2"}]}]}
+    assert extract_sources(payload, None) == {}
+
+
+def test_extract_notifications_collects_entries() -> None:
+    payload = {
+        "context": "vessels.self",
+        "updates": [
+            {
+                "$source": "src1",
+                "timestamp": "2026-01-03T22:34:57.853Z",
+                "values": [
+                    {"path": "navigation.speedOverGround", "value": 1.2},
+                    {
+                        "path": "notifications.navigation.anchor",
+                        "value": {"state": "alert", "message": "Anchor", "method": ["sound"]},
+                    },
+                    {
+                        "path": "notifications.navigation.course",
+                        "value": None,
+                        "$source": "src2",
+                        "timestamp": "2026-01-03T22:35:00.000Z",
+                    },
+                ],
+            }
+        ],
+    }
+
+    assert extract_notifications(payload, ["vessels.self"]) == [
+        {
+            "path": "notifications.navigation.anchor",
+            "value": {"state": "alert", "message": "Anchor", "method": ["sound"]},
+            "source": "src1",
+            "timestamp": "2026-01-03T22:34:57.853Z",
+        },
+        {
+            "path": "notifications.navigation.course",
+            "value": None,
+            "source": "src2",
+            "timestamp": "2026-01-03T22:35:00.000Z",
+        },
+    ]
+
+
+def test_extract_notifications_context_mismatch() -> None:
+    payload = {
+        "context": "vessels.other",
+        "updates": [
+            {"values": [{"path": "notifications.navigation.anchor", "value": {"state": "alert"}}]}
+        ],
+    }
+    assert extract_notifications(payload, ["vessels.self"]) == []
+
+
+def test_extract_notifications_non_dict() -> None:
+    assert extract_notifications([], None) == []
+
+
+def test_extract_notifications_updates_not_list() -> None:
+    assert extract_notifications({"updates": "nope"}, None) == []
+
+
+def test_extract_notifications_skips_invalid_entries() -> None:
+    payload = {
+        "updates": [
+            "bad",
+            {"values": "nope"},
+            {"values": ["bad", {"path": "notifications.navigation.anchor", "value": 1}]},
+            {"values": [{"path": "notifications.navigation.speed"}]},
+            {"values": [{"path": 123, "value": 2}]},
+        ]
+    }
+    assert extract_notifications(payload, None) == [
+        {"path": "notifications.navigation.anchor", "value": 1}
+    ]

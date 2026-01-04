@@ -17,6 +17,7 @@ from custom_components.signalk_ha import (
 )
 from custom_components.signalk_ha.const import (
     CONF_BASE_URL,
+    CONF_ENABLE_NOTIFICATIONS,
     CONF_HOST,
     CONF_INSTANCE_ID,
     CONF_PORT,
@@ -26,15 +27,17 @@ from custom_components.signalk_ha.const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     CONF_WS_URL,
+    DEFAULT_PERIOD_MS,
     DEFAULT_REFRESH_INTERVAL_HOURS,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    SK_PATH_NOTIFICATIONS,
 )
 from custom_components.signalk_ha.discovery import DiscoveredEntity, DiscoveryResult
 from custom_components.signalk_ha.runtime import SignalKRuntimeData
 
 
-def _make_entry() -> MockConfigEntry:
+def _make_entry(options=None) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -47,6 +50,7 @@ def _make_entry() -> MockConfigEntry:
             CONF_VESSEL_ID: "mmsi:261006533",
             CONF_VESSEL_NAME: "ONA",
         },
+        options=options or {},
     )
 
 
@@ -260,8 +264,11 @@ async def test_update_subscriptions_uses_registry_and_periods(hass) -> None:
 
     coordinator.async_update_paths.assert_awaited_once()
     paths, periods = coordinator.async_update_paths.call_args.args
-    assert paths == ["navigation.speedOverGround"]
-    assert periods == {"navigation.speedOverGround": 750}
+    assert paths == ["navigation.speedOverGround", SK_PATH_NOTIFICATIONS]
+    assert periods == {
+        "navigation.speedOverGround": 750,
+        SK_PATH_NOTIFICATIONS: DEFAULT_PERIOD_MS,
+    }
 
 
 def test_path_from_unique_id() -> None:
@@ -394,3 +401,30 @@ async def test_update_subscriptions_no_runtime(hass) -> None:
     entry.runtime_data = None
 
     await _async_update_subscriptions(hass, entry)
+
+
+async def test_update_subscriptions_disable_notifications(hass) -> None:
+    entry = _make_entry(options={CONF_ENABLE_NOTIFICATIONS: False})
+    entry.add_to_hass(hass)
+
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"signalk:{entry.entry_id}:navigation.speedOverGround",
+        suggested_object_id="speed_over_ground",
+        config_entry=entry,
+    ).entity_id
+
+    coordinator = AsyncMock()
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=SimpleNamespace(data=None),
+        auth=AsyncMock(),
+    )
+
+    await _async_update_subscriptions(hass, entry)
+
+    paths, periods = coordinator.async_update_paths.call_args.args
+    assert paths == ["navigation.speedOverGround"]
+    assert SK_PATH_NOTIFICATIONS not in periods

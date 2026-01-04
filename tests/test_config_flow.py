@@ -14,6 +14,7 @@ from custom_components.signalk_ha.config_flow import _admin_access_url
 from custom_components.signalk_ha.const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
+    CONF_ENABLE_NOTIFICATIONS,
     CONF_HOST,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
@@ -754,10 +755,11 @@ async def test_options_flow_updates_refresh_interval(hass, enable_custom_integra
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {CONF_REFRESH_INTERVAL_HOURS: 12},
+        {CONF_REFRESH_INTERVAL_HOURS: 12, CONF_ENABLE_NOTIFICATIONS: False},
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_REFRESH_INTERVAL_HOURS] == 12
+    assert entry.options[CONF_ENABLE_NOTIFICATIONS] is False
 
 
 async def test_auth_form_falls_back_to_access_url(hass) -> None:

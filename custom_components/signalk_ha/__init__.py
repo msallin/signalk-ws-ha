@@ -11,6 +11,7 @@ from .auth import SignalKAuthManager
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
+    CONF_ENABLE_NOTIFICATIONS,
     CONF_HOST,
     CONF_INSTANCE_ID,
     CONF_PORT,
@@ -20,11 +21,13 @@ from .const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     CONF_WS_URL,
+    DEFAULT_ENABLE_NOTIFICATIONS,
     DEFAULT_PERIOD_MS,
     DEFAULT_PORT,
     DEFAULT_REFRESH_INTERVAL_HOURS,
     DEFAULT_SSL,
     DEFAULT_VERIFY_SSL,
+    SK_PATH_NOTIFICATIONS,
 )
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
 from .identity import build_instance_id
@@ -140,6 +143,10 @@ async def _async_update_subscriptions(hass: HomeAssistant, entry: ConfigEntry) -
         if path:
             paths.append(path)
             periods[path] = discovery_periods.get(path, DEFAULT_PERIOD_MS)
+    if entry.options.get(CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS):
+        if SK_PATH_NOTIFICATIONS not in paths:
+            paths.append(SK_PATH_NOTIFICATIONS)
+            periods[SK_PATH_NOTIFICATIONS] = DEFAULT_PERIOD_MS
     await runtime.coordinator.async_update_paths(paths, periods)
 
 

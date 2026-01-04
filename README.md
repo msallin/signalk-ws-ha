@@ -23,6 +23,7 @@
 - WebSocket endpoint is fixed: `/signalk/v1/stream?subscribe=none`.
 - The integration subscribes only to enabled entity paths using `format=delta` and `policy=ideal`.
 - `navigation.position` is exposed as a Geo Location entity.
+- Signal K notifications (`notifications.*`) are forwarded as Home Assistant events when enabled in Options.
 - Entities are never deleted automatically; missing paths become unavailable with `last_seen`.
 
 ## Health sensors
@@ -33,6 +34,33 @@ Diagnostic sensors are created for:
 - Last message timestamp
 - Reconnect count
 - Last error
+
+## Notifications
+
+When "Enable Signal K notification events" is on (default), notifications are emitted as Home Assistant events:
+
+- Event: `signalk_ha_notification`
+- Payload includes: `path`, `value`, `state`, `message`, `method`, `timestamp`, `source`, `vessel_id`, `vessel_name`, `entry_id`
+
+Example automation (anchor alarm):
+
+```yaml
+alias: Signal K Anchor Alarm
+trigger:
+  - platform: event
+    event_type: signalk_ha_notification
+    event_data:
+      path: notifications.navigation.anchor
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.state == 'alert' }}"
+        sequence:
+          - service: notify.notify
+            data:
+              message: "Anchor alarm: {{ trigger.event.data.message }}"
+```
 
 ## Troubleshooting
 

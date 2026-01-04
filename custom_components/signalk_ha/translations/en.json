@@ -38,7 +38,8 @@
     "step": {
       "init": {
         "data": {
-          "refresh_interval_hours": "Discovery refresh interval (hours)"
+          "refresh_interval_hours": "Discovery refresh interval (hours)",
+          "enable_notifications": "Enable Signal K notification events"
         }
       }
     }

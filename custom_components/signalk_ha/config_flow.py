@@ -23,6 +23,7 @@ from .auth import (
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
+    CONF_ENABLE_NOTIFICATIONS,
     CONF_HOST,
     CONF_INSTANCE_ID,
     CONF_PORT,
@@ -32,6 +33,7 @@ from .const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     CONF_WS_URL,
+    DEFAULT_ENABLE_NOTIFICATIONS,
     DEFAULT_PORT,
     DEFAULT_REFRESH_INTERVAL_HOURS,
     DEFAULT_SSL,
@@ -329,18 +331,26 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
             hours = int(user_input[CONF_REFRESH_INTERVAL_HOURS])
+            notifications_enabled = bool(user_input[CONF_ENABLE_NOTIFICATIONS])
             return self.async_create_entry(
                 title="",
-                data={CONF_REFRESH_INTERVAL_HOURS: hours},
+                data={
+                    CONF_REFRESH_INTERVAL_HOURS: hours,
+                    CONF_ENABLE_NOTIFICATIONS: notifications_enabled,
+                },
             )
 
         current = self._entry.options.get(
             CONF_REFRESH_INTERVAL_HOURS,
             self._entry.data.get(CONF_REFRESH_INTERVAL_HOURS, DEFAULT_REFRESH_INTERVAL_HOURS),
         )
+        current_notifications = self._entry.options.get(
+            CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS
+        )
         schema = vol.Schema(
             {
                 vol.Optional(CONF_REFRESH_INTERVAL_HOURS, default=current): vol.Coerce(int),
+                vol.Optional(CONF_ENABLE_NOTIFICATIONS, default=current_notifications): cv.boolean,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

@@ -22,6 +22,7 @@ from .auth import AuthRequired, SignalKAuthManager, build_auth_headers
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
+    CONF_ENABLE_NOTIFICATIONS,
     CONF_HOST,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
@@ -30,13 +31,15 @@ from .const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     CONF_WS_URL,
+    DEFAULT_ENABLE_NOTIFICATIONS,
     DEFAULT_FORMAT,
     DEFAULT_POLICY,
     DEFAULT_REFRESH_INTERVAL_HOURS,
+    EVENT_SIGNAL_K_NOTIFICATION,
 )
 from .discovery import DiscoveryResult, MetadataConflict, discover_entities
 from .identity import resolve_vessel_identity
-from .parser import extract_sources, extract_values
+from .parser import extract_notifications, extract_sources, extract_values
 from .rest import async_fetch_vessel_self, normalize_base_url, normalize_ws_url
 from .subscription import build_subscribe_payload
 
@@ -49,6 +52,7 @@ _COALESCE_SECONDS = 0.5
 _LOG_INTERVAL_SECONDS = 60.0
 _STALE_CHECK_SECONDS = 60.0
 _INACTIVITY_TIMEOUT = 45.0
+_NOTIFICATION_DEDUPE_SECONDS = 5.0
 
 
 class ConnectionState(str, Enum):
@@ -191,6 +195,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._data_cache: dict[str, Any] = {}
         self._paths: list[str] = []
         self._periods: dict[str, int] = {}
+        self._notification_cache: dict[str, tuple[tuple[Any, ...], str | None, float]] = {}
         self._last_backoff: float = 0.0
 
         self.data = {}
@@ -424,9 +429,19 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         contexts = self._expected_contexts(cfg)
         changed = extract_values(obj, contexts)
+        notifications = extract_notifications(obj, contexts)
+        if notifications:
+            if self._notifications_enabled():
+                for notification in notifications:
+                    self._fire_notification(notification, cfg)
+            for notification in notifications:
+                changed.pop(notification["path"], None)
+
         sources = extract_sources(obj, contexts)
         source_changed = False
         for path, source in sources.items():
+            if path.startswith("notifications."):
+                continue
             if self._last_source_by_path.get(path) != source:
                 self._last_source_by_path[path] = source
                 source_changed = True
@@ -503,6 +518,77 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 contexts.append(f"vessels.{vessel_id}")
                 contexts.append(vessel_id)
         return contexts
+
+    def _notifications_enabled(self) -> bool:
+        return self._entry.options.get(CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS)
+
+    def _fire_notification(self, notification: dict[str, Any], cfg: SignalKConfig) -> None:
+        path = notification.get("path")
+        if not isinstance(path, str) or not path.startswith("notifications."):
+            return
+        value = notification.get("value")
+        source = notification.get("source") if isinstance(notification.get("source"), str) else None
+        timestamp = (
+            notification.get("timestamp")
+            if isinstance(notification.get("timestamp"), str)
+            else None
+        )
+
+        state = None
+        message = None
+        method = None
+        if isinstance(value, dict):
+            state = value.get("state")
+            message = value.get("message")
+            method = value.get("method")
+
+        signature = self._notification_signature(value, state, message, method, source)
+        now = time.monotonic()
+        last = self._notification_cache.get(path)
+        if last:
+            last_signature, last_timestamp, last_seen = last
+            if timestamp and timestamp == last_timestamp and signature == last_signature:
+                return
+            if (
+                not timestamp
+                and signature == last_signature
+                and now - last_seen < _NOTIFICATION_DEDUPE_SECONDS
+            ):
+                return
+
+        self._notification_cache[path] = (signature, timestamp, now)
+        self.hass.bus.async_fire(
+            EVENT_SIGNAL_K_NOTIFICATION,
+            {
+                "path": path,
+                "value": value,
+                "state": state,
+                "message": message,
+                "method": method,
+                "timestamp": timestamp,
+                "source": source,
+                "vessel_id": cfg.vessel_id,
+                "vessel_name": cfg.vessel_name,
+                "entry_id": self._entry.entry_id,
+            },
+        )
+
+    @staticmethod
+    def _notification_signature(
+        value: Any,
+        state: Any,
+        message: Any,
+        method: Any,
+        source: str | None,
+    ) -> tuple[Any, ...]:
+        if isinstance(value, (dict, list)):
+            try:
+                value_repr = json.dumps(value, sort_keys=True, default=str)
+            except TypeError:
+                value_repr = repr(value)
+        else:
+            value_repr = repr(value)
+        return (state, message, method, source, value_repr)
 
     @staticmethod
     def _build_ssl_param(cfg: SignalKConfig) -> ssl.SSLContext | bool | None:

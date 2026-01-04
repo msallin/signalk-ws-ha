@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.signalk_ha.auth import AuthRequired, SignalKAuthManager
 from custom_components.signalk_ha.const import (
     CONF_BASE_URL,
+    CONF_ENABLE_NOTIFICATIONS,
     CONF_HOST,
     CONF_PORT,
     CONF_SSL,
@@ -20,6 +22,7 @@ from custom_components.signalk_ha.const import (
     CONF_VESSEL_NAME,
     CONF_WS_URL,
     DOMAIN,
+    EVENT_SIGNAL_K_NOTIFICATION,
 )
 from custom_components.signalk_ha.coordinator import (
     ConnectionState,
@@ -29,7 +32,7 @@ from custom_components.signalk_ha.coordinator import (
 from custom_components.signalk_ha.discovery import DiscoveryResult
 
 
-def _make_entry() -> MockConfigEntry:
+def _make_entry(*, options: dict[str, Any] | None = None) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -42,6 +45,7 @@ def _make_entry() -> MockConfigEntry:
             CONF_VESSEL_ID: "mmsi:261006533",
             CONF_VESSEL_NAME: "ONA",
         },
+        options=options or {},
     )
 
 
@@ -104,6 +108,122 @@ def test_handle_message_invalid_json(hass) -> None:
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     coordinator._handle_message("invalid", coordinator.config)
     assert coordinator.counters["parse_errors"] == 1
+
+
+def test_handle_message_fires_notification_event(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    events: list = []
+    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+
+    payload = json.dumps(
+        {
+            "context": "vessels.self",
+            "updates": [
+                {
+                    "$source": "anchoralarm",
+                    "timestamp": "2026-01-03T22:34:57.853Z",
+                    "values": [
+                        {
+                            "path": "notifications.navigation.anchor",
+                            "value": {
+                                "state": "alert",
+                                "method": ["sound"],
+                                "message": "Anchor Alarm",
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    coordinator._handle_message(payload, coordinator.config)
+    coordinator._handle_message(payload, coordinator.config)
+
+    assert len(events) == 1
+    data = events[0].data
+    assert data["path"] == "notifications.navigation.anchor"
+    assert data["state"] == "alert"
+    assert data["message"] == "Anchor Alarm"
+    assert data["method"] == ["sound"]
+    assert data["timestamp"] == "2026-01-03T22:34:57.853Z"
+    assert data["source"] == "anchoralarm"
+    assert data["vessel_id"] == entry.data[CONF_VESSEL_ID]
+    assert data["vessel_name"] == entry.data[CONF_VESSEL_NAME]
+    assert data["entry_id"] == entry.entry_id
+    assert "notifications.navigation.anchor" not in coordinator._data_cache
+
+
+def test_handle_message_notifications_disabled_no_event(hass) -> None:
+    entry = _make_entry(options={CONF_ENABLE_NOTIFICATIONS: False})
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    events: list = []
+    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+
+    payload = json.dumps(
+        {
+            "context": "vessels.self",
+            "updates": [
+                {
+                    "$source": "anchoralarm",
+                    "values": [
+                        {
+                            "path": "notifications.navigation.anchor",
+                            "value": {"state": "alert"},
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    coordinator._handle_message(payload, coordinator.config)
+
+    assert events == []
+    assert "notifications.navigation.anchor" not in coordinator._data_cache
+
+
+def test_fire_notification_skips_invalid_path(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    events: list = []
+    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+
+    coordinator._fire_notification(
+        {"path": "navigation.speed", "value": {"state": "alert"}}, coordinator.config
+    )
+
+    assert events == []
+
+
+def test_fire_notification_dedupes_without_timestamp(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    events: list = []
+    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+
+    value = {"state": "alert"}
+    notification = {
+        "path": "notifications.navigation.anchor",
+        "value": value,
+        "source": "anchoralarm",
+    }
+    signature = coordinator._notification_signature(value, "alert", None, None, "anchoralarm")
+    coordinator._notification_cache[notification["path"]] = (signature, None, time.monotonic())
+    coordinator._fire_notification(notification, coordinator.config)
+
+    assert events == []
+
+
+def test_notification_signature_handles_bad_keys() -> None:
+    value = {("bad",): "data"}
+    signature = SignalKCoordinator._notification_signature(value, None, None, None, None)
+    assert signature[-1] == repr(value)
 
 
 async def test_send_subscribe_payload(hass) -> None:
