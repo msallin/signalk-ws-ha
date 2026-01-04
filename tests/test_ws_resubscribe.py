@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 from aiohttp import WSMsgType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.signalk_ha.auth import SignalKAuthManager
 from custom_components.signalk_ha.const import (
     CONF_BASE_URL,
     CONF_HOST,
@@ -36,7 +37,7 @@ async def test_subscribe_sent_on_connect(hass) -> None:
     )
     entry.add_to_hass(hass)
 
-    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock())
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     coordinator._paths = ["navigation.speedOverGround"]
     coordinator._periods = {"navigation.speedOverGround": 1000}
 

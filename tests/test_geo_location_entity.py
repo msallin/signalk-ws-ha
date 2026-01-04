@@ -4,6 +4,7 @@ from unittest.mock import Mock
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.signalk_ha.auth import SignalKAuthManager
 from custom_components.signalk_ha.const import (
     CONF_BASE_URL,
     CONF_HOST,
@@ -53,7 +54,7 @@ async def test_geo_location_updates(hass, enable_custom_integrations) -> None:
         description="Vessel position",
     )
     discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
-    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock())
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     coordinator._state = ConnectionState.CONNECTED
     coordinator.data = {"navigation.position": {"latitude": 1.0, "longitude": 2.0}}
     coordinator._last_update_by_path["navigation.position"] = dt_util.utcnow()

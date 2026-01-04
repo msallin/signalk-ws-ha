@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.signalk_ha.auth import SignalKAuthManager
 from custom_components.signalk_ha.const import (
     CONF_BASE_URL,
     CONF_HOST,
@@ -39,7 +40,7 @@ def test_tolerance_allows_small_changes(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
 
-    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock())
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     spec = DiscoveredEntity(
         path="navigation.speedOverGround",
         name="Speed",
@@ -64,7 +65,7 @@ def test_tolerance_triggers_large_changes(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
 
-    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock())
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     spec = DiscoveredEntity(
         path="navigation.speedOverGround",
         name="Speed",

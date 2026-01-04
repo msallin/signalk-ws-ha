@@ -17,6 +17,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     discovery = data["discovery"]
+    auth = data.get("auth")
     cfg = coordinator.config
 
     last_message = coordinator.last_message
@@ -29,12 +30,24 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     last_refresh = discovery.last_refresh
     last_refresh_iso = dt_util.as_utc(last_refresh).isoformat() if last_refresh else None
 
+    auth_last_success = auth.last_success if auth else None
+    auth_last_success_iso = (
+        dt_util.as_utc(auth_last_success).isoformat() if auth_last_success else None
+    )
+
     return {
         "config": {
             "rest_url": _redact_url(cfg.base_url),
             "ws_url": _redact_url(cfg.ws_url),
             "vessel_id": cfg.vessel_id,
             "vessel_name": cfg.vessel_name,
+        },
+        "auth": {
+            "state": auth.state.value if auth else None,
+            "access_request_active": auth.access_request_active if auth else None,
+            "token_present": auth.token_present if auth else None,
+            "last_error": auth.last_error if auth else None,
+            "last_success": auth_last_success_iso,
         },
         "connection_state": coordinator.connection_state,
         "last_error": coordinator.last_error,

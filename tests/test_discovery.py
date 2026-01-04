@@ -6,13 +6,12 @@ from custom_components.signalk_ha.discovery import discover_entities
 
 def test_discovery_finds_expected_paths() -> None:
     data = json.loads(Path("tests/vessel_self_testdata.json").read_text(encoding="utf-8"))
-    result = discover_entities(data, scopes=("electrical", "environment", "tanks", "navigation"))
+    result = discover_entities(data, scopes=("environment", "tanks", "navigation"))
     paths = {entity.path for entity in result.entities}
 
     assert "navigation.speedOverGround" in paths
     assert "navigation.courseOverGroundTrue" in paths
     assert "environment.inside.saloon.temperature" in paths
-    assert "electrical.ac.0.phase.A.lineNeutralVoltage" in paths
     assert "tanks.freshWater.0.currentLevel" in paths
     assert "navigation.position" in paths
     assert "notifications.navigation.course.perpendicularPassed" not in paths

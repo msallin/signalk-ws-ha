@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import ssl
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import async_timeout
 from aiohttp import ClientSession
+
+from .auth import AuthRequired, build_auth_headers, build_ssl_context
 
 
 def normalize_base_url(host: str, port: int, use_ssl: bool) -> str:
@@ -27,17 +28,16 @@ def normalize_host_input(host: str) -> tuple[str, int | None, str | None]:
 
 
 async def async_fetch_vessel_self(
-    session: ClientSession, base_url: str, verify_ssl: bool
+    session: ClientSession, base_url: str, verify_ssl: bool, token: str | None = None
 ) -> dict[str, Any]:
     url = urlunsplit(urlsplit(base_url)._replace(path="/signalk/v1/api/vessels/self"))
-    ssl_context = None
-    if not verify_ssl:
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
+    ssl_context = build_ssl_context(verify_ssl)
+    headers = build_auth_headers(token)
 
     async with async_timeout.timeout(10):
-        async with session.get(url, ssl=ssl_context) as resp:
+        async with session.get(url, ssl=ssl_context, headers=headers) as resp:
+            if resp.status in (401, 403):
+                raise AuthRequired("Authentication required")
             resp.raise_for_status()
             data = await resp.json()
             if not isinstance(data, dict):

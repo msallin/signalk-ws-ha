@@ -10,6 +10,7 @@ CONF_VESSEL_ID = "vessel_id"
 CONF_VESSEL_NAME = "vessel_name"
 CONF_INSTANCE_ID = "instance_id"
 CONF_REFRESH_INTERVAL_HOURS = "refresh_interval_hours"
+CONF_ACCESS_TOKEN = "access_token"
 
 DEFAULT_PORT = 3000
 DEFAULT_SSL = False

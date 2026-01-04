@@ -13,6 +13,7 @@ def test_build_ssl_context_disabled() -> None:
         ws_url="wss://sk.local:3000/signalk/v1/stream?subscribe=none",
         vessel_id="mmsi:261006533",
         vessel_name="ONA",
+        access_token=None,
     )
 
     context = SignalKCoordinator._build_ssl_context(cfg)
@@ -31,6 +32,7 @@ def test_build_ssl_context_default() -> None:
         ws_url="wss://sk.local:3000/signalk/v1/stream?subscribe=none",
         vessel_id="mmsi:261006533",
         vessel_name="ONA",
+        access_token=None,
     )
 
     assert SignalKCoordinator._build_ssl_context(cfg) is None
@@ -46,6 +48,7 @@ def test_build_ssl_context_no_tls() -> None:
         ws_url="ws://sk.local:3000/signalk/v1/stream?subscribe=none",
         vessel_id="mmsi:261006533",
         vessel_name="ONA",
+        access_token=None,
     )
 
     assert SignalKCoordinator._build_ssl_context(cfg) is None

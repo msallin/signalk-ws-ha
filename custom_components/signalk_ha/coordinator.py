@@ -11,13 +11,16 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
-from aiohttp import ClientError, ClientSession, ClientTimeout, WSMsgType
+from aiohttp import ClientError, ClientSession, ClientTimeout, WSMsgType, WSServerHandshakeError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
+from .auth import AuthRequired, SignalKAuthManager, build_auth_headers
 from .const import (
+    CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
     CONF_HOST,
     CONF_PORT,
@@ -66,6 +69,7 @@ class SignalKConfig:
     ws_url: str
     vessel_id: str
     vessel_name: str
+    access_token: str | None = None
 
 
 @dataclass
@@ -76,9 +80,16 @@ class SignalKStats:
 
 
 class SignalKDiscoveryCoordinator(DataUpdateCoordinator[DiscoveryResult]):
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, session: ClientSession) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        session: ClientSession,
+        auth: SignalKAuthManager,
+    ) -> None:
         self._entry = entry
         self._session = session
+        self._auth = auth
         self._conflicts: list[MetadataConflict] = []
         self._last_refresh: datetime | None = None
 
@@ -103,7 +114,15 @@ class SignalKDiscoveryCoordinator(DataUpdateCoordinator[DiscoveryResult]):
 
     async def _async_update_data(self) -> DiscoveryResult:
         cfg = self._config()
-        vessel = await async_fetch_vessel_self(self._session, cfg.base_url, cfg.verify_ssl)
+        try:
+            vessel = await async_fetch_vessel_self(
+                self._session, cfg.base_url, cfg.verify_ssl, cfg.access_token
+            )
+        except AuthRequired as exc:
+            self._auth.mark_failure(str(exc))
+            raise ConfigEntryAuthFailed("Signal K authentication required") from exc
+        else:
+            self._auth.mark_success()
         identity = resolve_vessel_identity(vessel, cfg.base_url)
         if identity.vessel_id and identity.vessel_id != cfg.vessel_id:
             _LOGGER.warning(
@@ -116,9 +135,7 @@ class SignalKDiscoveryCoordinator(DataUpdateCoordinator[DiscoveryResult]):
                 self._entry, data={**self._entry.data, CONF_VESSEL_NAME: identity.vessel_name}
             )
 
-        result = discover_entities(
-            vessel, scopes=("electrical", "environment", "tanks", "navigation")
-        )
+        result = discover_entities(vessel, scopes=("environment", "tanks", "navigation"))
         self._conflicts = result.conflicts
         self._last_refresh = dt_util.utcnow()
         return result
@@ -136,6 +153,7 @@ class SignalKDiscoveryCoordinator(DataUpdateCoordinator[DiscoveryResult]):
             or normalize_ws_url(data[CONF_HOST], data[CONF_PORT], data[CONF_SSL]),
             vessel_id=data.get(CONF_VESSEL_ID, ""),
             vessel_name=data.get(CONF_VESSEL_NAME, "Unknown Vessel"),
+            access_token=data.get(CONF_ACCESS_TOKEN),
         )
 
     async def async_stop(self) -> None:
@@ -149,17 +167,20 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry: ConfigEntry,
         session: ClientSession,
         discovery: SignalKDiscoveryCoordinator,
+        auth: SignalKAuthManager,
     ) -> None:
         super().__init__(hass, _LOGGER, name=f"Signal K {entry.entry_id}")
         self._entry = entry
         self._session = session
         self._discovery = discovery
+        self._auth = auth
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self._ws = None
         self._flush_handle: asyncio.TimerHandle | None = None
         self._log_times: dict[str, float] = {}
         self._stale_unsub: asyncio.TimerHandle | None = None
+        self._reauth_started = False
 
         self._state = ConnectionState.DISCONNECTED
         self._last_error: str | None = None
@@ -188,6 +209,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             or normalize_ws_url(data[CONF_HOST], data[CONF_PORT], data[CONF_SSL]),
             vessel_id=data.get(CONF_VESSEL_ID, ""),
             vessel_name=data.get(CONF_VESSEL_NAME, "Unknown Vessel"),
+            access_token=data.get(CONF_ACCESS_TOKEN),
         )
 
     @property
@@ -233,6 +255,26 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @property
     def subscribed_paths(self) -> list[str]:
         return list(self._paths)
+
+    @property
+    def auth_state(self) -> str:
+        return self._auth.state.value
+
+    @property
+    def auth_last_error(self) -> str | None:
+        return self._auth.last_error
+
+    @property
+    def auth_last_success(self):
+        return self._auth.last_success
+
+    @property
+    def auth_access_request_active(self) -> bool:
+        return self._auth.access_request_active
+
+    @property
+    def auth_token_present(self) -> bool:
+        return self._auth.token_present
 
     async def async_start(self) -> None:
         if self._task is not None:
@@ -287,6 +329,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             cfg = self.config
             url = cfg.ws_url
             ssl_context = self._build_ssl_context(cfg)
+            headers = build_auth_headers(self._auth.token)
 
             self._set_state(ConnectionState.CONNECTING)
             try:
@@ -296,10 +339,12 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     heartbeat=30,
                     timeout=ClientTimeout(total=10),
                     ssl=ssl_context,
+                    headers=headers,
                 ) as ws:
                     self._ws = ws
                     backoff = _BACKOFF_MIN
                     self._last_backoff = 0.0
+                    self._auth.mark_success()
 
                     self._set_state(ConnectionState.SUBSCRIBING)
                     await self._send_subscribe(ws)
@@ -324,6 +369,9 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             break
 
             except (asyncio.TimeoutError, ClientError, OSError) as ex:
+                if isinstance(ex, WSServerHandshakeError) and ex.status in (401, 403):
+                    self._handle_auth_failure(f"WebSocket auth failed ({ex.status})")
+                    return
                 self._record_error(f"{type(ex).__name__}: {ex}")
                 _LOGGER.warning("Signal K connection error: %s", ex)
             except asyncio.CancelledError:
@@ -423,6 +471,12 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_error = message[:200]
         self._schedule_flush(immediate=True)
 
+    def _handle_auth_failure(self, message: str) -> None:
+        self._record_error(message)
+        self._auth.mark_failure(message)
+        self._set_state(ConnectionState.DISCONNECTED)
+        self._start_reauth()
+
     def _log_rate_limited(self, level: int, message: str, *, key: str) -> None:
         now = time.monotonic()
         last = self._log_times.get(key, 0.0)
@@ -450,6 +504,13 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
         return context
+
+    def _start_reauth(self) -> None:
+        if self._reauth_started:
+            return
+        self._reauth_started = True
+        self._auth.mark_access_request_active()
+        self.hass.async_create_task(self._entry.async_start_reauth(self.hass))
 
     def _schedule_stale_checks(self) -> None:
         if self._stale_unsub is not None:

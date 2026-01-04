@@ -6,7 +6,9 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_registry import EVENT_ENTITY_REGISTRY_UPDATED
 
+from .auth import SignalKAuthManager
 from .const import (
+    CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
     CONF_HOST,
     CONF_INSTANCE_ID,
@@ -34,12 +36,14 @@ PLATFORMS: list[str] = ["sensor", "geo_location"]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
 
-    discovery = SignalKDiscoveryCoordinator(hass, entry, session)
-    coordinator = SignalKCoordinator(hass, entry, session, discovery)
+    auth = SignalKAuthManager(entry.data.get(CONF_ACCESS_TOKEN))
+    discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
+    coordinator = SignalKCoordinator(hass, entry, session, discovery, auth)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
         "discovery": discovery,
+        "auth": auth,
     }
 
     await discovery.async_refresh()

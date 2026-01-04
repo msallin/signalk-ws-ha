@@ -10,11 +10,25 @@
           "ssl": "Use TLS (https/wss)",
           "verify_ssl": "Verify TLS certificate"
         }
+      },
+      "auth": {
+        "title": "Signal K Authorization",
+        "description": "This Signal K server requires approval. Open {approval_url} and approve the access request, then click Submit to continue."
       }
     },
     "error": {
       "cannot_connect": "Failed to connect. Check host, port, and TLS.",
-      "invalid_response": "Signal K response was invalid."
+      "invalid_response": "Signal K response was invalid.",
+      "auth_not_supported": "Authentication is required but access requests are not supported.",
+      "auth_timeout": "Access request approval timed out.",
+      "auth_rejected": "Access request was rejected.",
+      "auth_failed": "Authentication failed. Approve the request and try again."
+    },
+    "abort": {
+      "auth_not_supported": "Authentication is required but access requests are not supported.",
+      "reauth_successful": "Authentication updated.",
+      "auth_cancelled": "Authentication was cancelled.",
+      "cannot_connect": "Failed to connect. Check host, port, and TLS."
     }
   },
   "options": {

@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.signalk_ha.auth import SignalKAuthManager
 from custom_components.signalk_ha.const import DOMAIN
 from custom_components.signalk_ha.diagnostics import async_get_config_entry_diagnostics
 
@@ -28,11 +29,15 @@ async def test_diagnostics_redacts_urls(hass) -> None:
         subscribed_paths=[],
     )
     discovery = SimpleNamespace(conflicts=[], last_refresh=None)
+    auth = SignalKAuthManager("token123")
+    auth.mark_success()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
         "discovery": discovery,
+        "auth": auth,
     }
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
     assert diagnostics["config"]["rest_url"] == "<redacted>"
     assert diagnostics["config"]["ws_url"] == "<redacted>"
+    assert diagnostics["auth"]["token_present"] is True
