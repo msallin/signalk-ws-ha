@@ -1,6 +1,11 @@
 import json
 
-from custom_components.signalk_ha.parser import extract_sources, extract_values, parse_delta_text
+from custom_components.signalk_ha.parser import (
+    _context_matches,
+    extract_sources,
+    extract_values,
+    parse_delta_text,
+)
 
 
 def test_parse_invalid_json_returns_empty() -> None:
@@ -10,6 +15,10 @@ def test_parse_invalid_json_returns_empty() -> None:
 def test_parse_non_delta_returns_empty() -> None:
     payload = json.dumps({"name": "signalk-server"})
     assert parse_delta_text(payload, None) == {}
+
+
+def test_parse_non_object_json_returns_empty() -> None:
+    assert parse_delta_text(json.dumps([1, 2, 3]), None) == {}
 
 
 def test_parse_single_update_single_value() -> None:
@@ -80,6 +89,20 @@ def test_extract_values_missing_fields() -> None:
     assert extract_values({"updates": [{"values": [{"path": "p"}]}]}, None) == {}
 
 
+def test_extract_values_skips_invalid_updates() -> None:
+    payload = {
+        "updates": [
+            "bad",
+            {"values": ["bad", {"path": "p", "value": 1}]},
+        ]
+    }
+    assert extract_values(payload, None) == {"p": 1}
+
+
+def test_extract_values_non_dict_delta() -> None:
+    assert extract_values([], None) == {}
+
+
 def test_context_mismatch_returns_empty() -> None:
     payload = {"context": "vessels.other", "updates": [{"values": [{"path": "p", "value": 1}]}]}
     assert extract_values(payload, ["vessels.self"]) == {}
@@ -114,6 +137,19 @@ def test_context_mmsi_accepts_resolved_context() -> None:
     assert extract_values(payload, ["mmsi:261006533"]) == {"p": 1}
 
 
+def test_context_matches_empty_expected_or_incoming() -> None:
+    assert _context_matches(None, "vessels.self") is True
+    assert _context_matches("vessels.self", None) is True
+
+
+def test_context_urn_matches_full_context() -> None:
+    payload = {
+        "context": "vessels.urn:mrn:imo:mmsi:123456789",
+        "updates": [{"values": [{"path": "p", "value": 1}]}],
+    }
+    assert extract_values(payload, ["urn:mrn:imo:mmsi:123456789"]) == {"p": 1}
+
+
 def test_extract_sources_from_update() -> None:
     payload = {
         "context": "vessels.self",
@@ -131,3 +167,31 @@ def test_extract_sources_from_update() -> None:
         "navigation.speedOverGround": "src1",
         "navigation.headingTrue": "src1",
     }
+
+
+def test_extract_sources_skips_invalid_entries() -> None:
+    payload = {
+        "updates": [
+            "bad",
+            {"values": ["bad", {"path": "navigation.speedOverGround"}]},
+            {"values": [{"path": "navigation.headingTrue", "$source": "src2"}]},
+        ]
+    }
+    assert extract_sources(payload, None) == {"navigation.headingTrue": "src2"}
+
+
+def test_extract_sources_non_dict_delta() -> None:
+    assert extract_sources([], None) == {}
+
+
+def test_extract_sources_updates_not_list() -> None:
+    payload = {"updates": "nope"}
+    assert extract_sources(payload, None) == {}
+
+
+def test_extract_sources_context_mismatch() -> None:
+    payload = {
+        "context": "vessels.other",
+        "updates": [{"values": [{"path": "p", "$source": "src"}]}],
+    }
+    assert extract_sources(payload, ["vessels.self"]) == {}

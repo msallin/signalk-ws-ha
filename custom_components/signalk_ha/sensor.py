@@ -29,6 +29,8 @@ from .const import (
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
 from .discovery import DiscoveredEntity, convert_value
 
+PARALLEL_UPDATES = 1
+
 
 @dataclass(frozen=True)
 class HealthSpec:
@@ -60,9 +62,11 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: SignalKCoordinator = data["coordinator"]
-    discovery: SignalKDiscoveryCoordinator = data["discovery"]
+    runtime = entry.runtime_data
+    if runtime is None:
+        return
+    coordinator: SignalKCoordinator = runtime.coordinator
+    discovery: SignalKDiscoveryCoordinator = runtime.discovery
 
     entities: list[SensorEntity] = []
     specs = _sensor_specs(discovery)
@@ -143,6 +147,8 @@ def _registry_sensor_specs(hass: HomeAssistant, entry: ConfigEntry) -> list[Disc
 
 
 class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         coordinator: SignalKCoordinator,
@@ -208,9 +214,7 @@ class SignalKSensor(SignalKBaseSensor):
     ) -> None:
         super().__init__(coordinator, discovery, entry)
         self._spec = spec
-        vessel_name = entry.data.get(CONF_VESSEL_NAME, "Unknown Vessel")
-
-        self._attr_name = f"{vessel_name} {spec.name}"
+        self._attr_name = spec.name
         self._attr_unique_id = f"signalk:{entry.entry_id}:{spec.path}"
         if spec.device_class:
             self._attr_device_class = spec.device_class
@@ -261,9 +265,7 @@ class SignalKHealthSensor(SignalKBaseSensor):
     ) -> None:
         super().__init__(coordinator, None, entry)
         self._spec = spec
-        vessel_name = entry.data.get(CONF_VESSEL_NAME, "Unknown Vessel")
-
-        self._attr_name = f"{vessel_name} {spec.name}"
+        self._attr_name = spec.name
         self._attr_unique_id = f"signalk:{entry.entry_id}:health:{spec.key}"
         self._attr_entity_registry_enabled_default = spec.enabled_default
         if spec.device_class:
@@ -328,7 +330,7 @@ def _is_stale(path: str, coordinator: SignalKCoordinator) -> bool:
 def _path_available(path: str, discovery: SignalKDiscoveryCoordinator | None) -> bool:
     if not discovery or not discovery.data:
         return True
-    return any(spec.path == path for spec in discovery.data.entities)
+    return path in discovery.data.paths
 
 
 def _path_from_unique_id(unique_id: str | None) -> str | None:

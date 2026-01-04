@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from .const import DEFAULT_FORMAT, DEFAULT_POLICY
+from .const import DEFAULT_FORMAT, DEFAULT_PERIOD_MS, DEFAULT_POLICY
 
 
 def build_subscribe_payload(
@@ -22,9 +22,7 @@ def build_subscribe_payload(
             continue
         if path in seen:
             continue
-        period = raw.get("period")
-        if period is None:
-            continue
+        period = raw.get("period", DEFAULT_PERIOD_MS)
         subscribe.append({"path": path, "period": int(period), "format": fmt, "policy": policy})
         seen.add(path)
     return {"context": context, "subscribe": subscribe}

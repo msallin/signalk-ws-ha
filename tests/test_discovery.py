@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from custom_components.signalk_ha.discovery import discover_entities
+from custom_components.signalk_ha.discovery import convert_value, discover_entities
 
 
 def test_discovery_finds_expected_paths() -> None:
@@ -25,6 +25,13 @@ def test_discovery_position_is_geo_location() -> None:
     assert position[0].kind == "geo_location"
 
 
+def test_discovery_result_indexes() -> None:
+    data = json.loads(Path("tests/vessel_self_testdata.json").read_text(encoding="utf-8"))
+    result = discover_entities(data, scopes=("navigation",))
+    assert "navigation.speedOverGround" in result.paths
+    assert ("navigation.position", "geo_location") in result.path_kinds
+
+
 def test_discovery_walks_children_when_value_present() -> None:
     data = json.loads(Path("tests/vessel_self_testdata.json").read_text(encoding="utf-8"))
     result = discover_entities(data, scopes=("navigation",))
@@ -32,3 +39,65 @@ def test_discovery_walks_children_when_value_present() -> None:
 
     assert "navigation.courseGreatCircle.nextPoint.arrivalCircle" in paths
     assert "navigation.courseGreatCircle.nextPoint.steerError" in paths
+
+
+def test_discovery_skips_href_and_url_description() -> None:
+    data = {
+        "navigation": {
+            "link": {"value": 1, "meta": {"description": "See URL for details"}},
+            "foo": {"href": {"value": "http://example.com"}},
+        }
+    }
+    result = discover_entities(data, scopes=("navigation",))
+    paths = {entity.path for entity in result.entities}
+    assert "navigation.link" not in paths
+    assert "navigation.foo.href" not in paths
+
+
+def test_discovery_skips_non_dict_children() -> None:
+    data = {"navigation": {"speedOverGround": {"value": 1}, "foo": "bar"}}
+    result = discover_entities(data, scopes=("navigation",))
+    paths = {entity.path for entity in result.entities}
+    assert "navigation.foo" not in paths
+    assert "navigation.speedOverGround" in paths
+
+
+def test_discovery_meta_display_name_and_units() -> None:
+    data = {
+        "environment": {
+            "outside": {
+                "temperature": {
+                    "value": 300.0,
+                    "meta": {"units": "K", "displayName": "Outside Temp"},
+                }
+            }
+        }
+    }
+    result = discover_entities(data, scopes=("environment",))
+    entity = next(spec for spec in result.entities if spec.path.endswith("temperature"))
+    assert entity.name == "Outside Temp"
+    assert entity.unit == "degC"
+    assert entity.conversion is not None
+
+
+def test_discovery_ratio_current_level_conversion() -> None:
+    data = {
+        "tanks": {
+            "fuel": {
+                "0": {
+                    "currentLevel": {
+                        "value": 0.4,
+                        "meta": {"units": "ratio", "shortName": "Fuel"},
+                    }
+                }
+            }
+        }
+    }
+    result = discover_entities(data, scopes=("tanks",))
+    entity = next(spec for spec in result.entities if spec.path.endswith("currentLevel"))
+    assert entity.unit == "%"
+    assert entity.tolerance is not None
+
+
+def test_convert_value_non_numeric_returns_raw() -> None:
+    assert convert_value("abc", None) == "abc"

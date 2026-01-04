@@ -462,9 +462,17 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _set_state(self, state: ConnectionState) -> None:
         if self._state == state:
             return
+        previous = self._state
         self._state = state
         if state == ConnectionState.CONNECTED:
             self._last_error = None
+            if previous != ConnectionState.CONNECTED:
+                _LOGGER.info("Signal K connection restored")
+        elif previous == ConnectionState.CONNECTED and state in (
+            ConnectionState.DISCONNECTED,
+            ConnectionState.RECONNECTING,
+        ):
+            _LOGGER.warning("Signal K connection unavailable")
         self._schedule_flush(immediate=True)
 
     def _record_error(self, message: str) -> None:

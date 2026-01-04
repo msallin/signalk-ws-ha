@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_registry import EVENT_ENTITY_REGISTRY_UPDATED
@@ -24,11 +25,11 @@ from .const import (
     DEFAULT_REFRESH_INTERVAL_HOURS,
     DEFAULT_SSL,
     DEFAULT_VERIFY_SSL,
-    DOMAIN,
 )
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
 from .identity import build_instance_id
 from .rest import normalize_base_url, normalize_ws_url
+from .runtime import SignalKRuntimeData
 
 PLATFORMS: list[str] = ["sensor", "geo_location"]
 
@@ -40,13 +41,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
     coordinator = SignalKCoordinator(hass, entry, session, discovery, auth)
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        "coordinator": coordinator,
-        "discovery": discovery,
-        "auth": auth,
-    }
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=discovery,
+        auth=auth,
+    )
 
-    await discovery.async_refresh()
+    await discovery.async_config_entry_first_refresh()
+    if not discovery.last_update_success:
+        raise ConfigEntryNotReady("Signal K discovery failed")
     await coordinator.async_start()
 
     entry.async_on_unload(entry.add_update_listener(_async_entry_updated))
@@ -57,8 +60,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     @callback
     def _registry_updated(event):
         entity_id = event.data.get("entity_id")
-        if not entity_id or event.data.get("action") not in ("update", "create", "remove"):
+        action = event.data.get("action")
+        if not entity_id or action not in ("update", "create", "remove"):
             return
+        if action == "update":
+            changes = event.data.get("changes", {})
+            if not any(key in changes for key in ("disabled_by", "disabled")):
+                return
         registry = er.async_get(hass)
         entry_data = registry.async_get(entity_id)
         if entry_data and entry_data.config_entry_id == entry.entry_id:
@@ -98,10 +106,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    if data:
-        await data["coordinator"].async_stop()
-        await data["discovery"].async_stop()
+    runtime: SignalKRuntimeData | None = entry.runtime_data
+    if runtime:
+        await runtime.coordinator.async_stop()
+        await runtime.discovery.async_stop()
+    entry.runtime_data = None
 
     return unload_ok
 
@@ -111,14 +120,14 @@ async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def _async_update_subscriptions(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    if not data:
+    runtime: SignalKRuntimeData | None = entry.runtime_data
+    if not runtime:
         return
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
     paths: list[str] = []
     periods: dict[str, int] = {}
-    discovery = data.get("discovery")
+    discovery = runtime.discovery
     discovery_periods: dict[str, int] = {}
     if discovery and discovery.data:
         discovery_periods = {
@@ -131,7 +140,7 @@ async def _async_update_subscriptions(hass: HomeAssistant, entry: ConfigEntry) -
         if path:
             paths.append(path)
             periods[path] = discovery_periods.get(path, DEFAULT_PERIOD_MS)
-    await data["coordinator"].async_update_paths(paths, periods)
+    await runtime.coordinator.async_update_paths(paths, periods)
 
 
 def _path_from_unique_id(unique_id: str | None) -> str | None:

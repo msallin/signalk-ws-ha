@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
@@ -48,6 +48,16 @@ class DiscoveredEntity:
 class DiscoveryResult:
     entities: list[DiscoveredEntity]
     conflicts: list[MetadataConflict]
+    paths: frozenset[str] = field(init=False)
+    path_kinds: frozenset[tuple[str, str]] = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "paths", frozenset(spec.path for spec in self.entities))
+        object.__setattr__(
+            self,
+            "path_kinds",
+            frozenset((spec.path, spec.kind) for spec in self.entities),
+        )
 
 
 def discover_entities(data: dict[str, Any], scopes: Iterable[str]) -> DiscoveryResult:

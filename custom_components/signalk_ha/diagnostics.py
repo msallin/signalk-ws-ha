@@ -4,8 +4,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
-
 
 def _redact_url(url: str) -> str:
     if not url:
@@ -14,10 +12,12 @@ def _redact_url(url: str) -> str:
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict:
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
-    discovery = data["discovery"]
-    auth = data.get("auth")
+    runtime = getattr(entry, "runtime_data", None)
+    if runtime is None:
+        return {"error": "no_runtime_data"}
+    coordinator = runtime.coordinator
+    discovery = runtime.discovery
+    auth = runtime.auth
     cfg = coordinator.config
 
     last_message = coordinator.last_message

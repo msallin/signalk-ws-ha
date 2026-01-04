@@ -23,13 +23,17 @@ from .const import (
 )
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
 
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: SignalKCoordinator = data["coordinator"]
-    discovery: SignalKDiscoveryCoordinator = data["discovery"]
+    runtime = entry.runtime_data
+    if runtime is None:
+        return
+    coordinator: SignalKCoordinator = runtime.coordinator
+    discovery: SignalKDiscoveryCoordinator = runtime.discovery
 
     should_create = _should_create_geolocation(discovery) or _registry_has_geolocation(hass, entry)
     if should_create:
@@ -84,6 +88,7 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
 class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
     _attr_entity_registry_enabled_default = False
     _attr_source = "Signal K"
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -95,10 +100,9 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         self._entry = entry
         self._discovery = discovery
         self._attr_device_info = _device_info(entry)
-        vessel_name = entry.data.get(CONF_VESSEL_NAME, "Unknown Vessel")
         self._description = _position_description(discovery)
 
-        self._attr_name = f"{vessel_name} Position"
+        self._attr_name = "Position"
         self._attr_unique_id = f"signalk:{entry.entry_id}:{SK_PATH_POSITION}"
         self._last_coords: tuple[float, float] | None = None
         self._last_write: float | None = None
@@ -208,10 +212,7 @@ def _is_stale(coordinator: SignalKCoordinator) -> bool:
 def _path_available(discovery: SignalKDiscoveryCoordinator) -> bool:
     if not discovery.data:
         return True
-    return any(
-        spec.path == SK_PATH_POSITION and spec.kind == "geo_location"
-        for spec in discovery.data.entities
-    )
+    return (SK_PATH_POSITION, "geo_location") in discovery.data.path_kinds
 
 
 def _position_description(discovery: SignalKDiscoveryCoordinator) -> str | None:

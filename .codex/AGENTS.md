@@ -145,7 +145,6 @@ Discovery failures must never remove or unload existing entities.
 
 ### Scope (Default)
 
-- electrical
 - environment
 - tanks
 - navigation

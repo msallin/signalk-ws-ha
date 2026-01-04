@@ -1,0 +1,408 @@
+import time
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.signalk_ha.auth import SignalKAuthManager
+from custom_components.signalk_ha.const import (
+    CONF_BASE_URL,
+    CONF_HOST,
+    CONF_PORT,
+    CONF_SSL,
+    CONF_VERIFY_SSL,
+    CONF_VESSEL_ID,
+    CONF_VESSEL_NAME,
+    CONF_WS_URL,
+    DEFAULT_MIN_UPDATE_SECONDS,
+    DOMAIN,
+)
+from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoordinator
+from custom_components.signalk_ha.discovery import DiscoveredEntity, DiscoveryResult
+from custom_components.signalk_ha.sensor import (
+    HealthSpec,
+    SignalKHealthSensor,
+    SignalKSensor,
+    _device_info,
+    _is_stale,
+    _last_seen,
+    _path_available,
+    _path_from_unique_id,
+    _registry_sensor_specs,
+    _sensor_specs,
+    _SignalKDiscoveryListener,
+)
+
+
+def _make_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "sk.local",
+            CONF_PORT: 3000,
+            CONF_SSL: False,
+            CONF_VERIFY_SSL: True,
+            CONF_BASE_URL: "http://sk.local:3000/signalk/v1/api/",
+            CONF_WS_URL: "ws://sk.local:3000/signalk/v1/stream?subscribe=none",
+            CONF_VESSEL_ID: "mmsi:261006533",
+            CONF_VESSEL_NAME: "ONA",
+        },
+    )
+
+
+async def test_registry_sensor_specs(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"signalk:{entry.entry_id}:navigation.speedOverGround",
+        suggested_object_id="speed_over_ground",
+        config_entry=entry,
+    )
+
+    specs = _registry_sensor_specs(hass, entry)
+    assert specs
+    assert specs[0].path == "navigation.speedOverGround"
+
+
+async def test_registry_sensor_specs_filters_invalid(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "geo_location",
+        DOMAIN,
+        f"signalk:{entry.entry_id}:navigation.position",
+        suggested_object_id="position",
+        config_entry=entry,
+    )
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "invalid",
+        suggested_object_id="invalid",
+        config_entry=entry,
+    )
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"signalk:{entry.entry_id}:navigation.depth",
+        suggested_object_id="depth",
+        config_entry=entry,
+    )
+
+    specs = _registry_sensor_specs(hass, entry)
+    assert [spec.path for spec in specs] == ["navigation.depth"]
+
+
+def test_health_sensor_value() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    spec = HealthSpec("connection_state", "Connection State", lambda coord: coord.connection_state)
+    sensor = SignalKHealthSensor(coordinator, entry, spec)
+    assert sensor.native_value == coordinator.connection_state
+
+
+def test_discovery_listener_adds_entities() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit="kn",
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    async_add = Mock()
+
+    listener = _SignalKDiscoveryListener(
+        coordinator, discovery, entry, async_add, known_paths=set()
+    )
+    listener.handle_update()
+
+    async_add.assert_called_once()
+
+
+def test_discovery_listener_skips_known_paths() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit="kn",
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    async_add = Mock()
+
+    listener = _SignalKDiscoveryListener(
+        coordinator, discovery, entry, async_add, known_paths={spec.path}
+    )
+    listener.handle_update()
+
+    async_add.assert_not_called()
+
+
+def test_sensor_should_write_state_on_value_change() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+
+    sensor._last_native_value = "old"
+    sensor._last_available = True
+    assert sensor._should_write_state("new", True) is True
+
+
+def test_sensor_should_write_state_respects_tolerance() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=0.1,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+    sensor._last_write = time.monotonic()
+    sensor._last_native_value = 10.0
+    sensor._last_available = True
+
+    assert sensor._should_write_state(10.05, True) is False
+
+
+def test_sensor_should_write_state_on_availability_change() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+    sensor._last_write = time.monotonic()
+    sensor._last_available = False
+
+    assert sensor._should_write_state(10.0, True) is True
+
+
+def test_sensor_should_write_state_after_min_interval() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=0.0,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+    sensor._last_write = time.monotonic()
+    sensor._last_available = True
+
+    assert sensor._should_write_state(10.0, True) is True
+
+
+def test_sensor_should_write_state_when_value_clears() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+    sensor._last_write = time.monotonic()
+    sensor._last_native_value = 10.0
+    sensor._last_available = True
+
+    assert sensor._should_write_state(None, True) is True
+
+
+def test_health_sensor_available() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    spec = HealthSpec("connection_state", "Connection State", lambda coord: coord.connection_state)
+    sensor = SignalKHealthSensor(coordinator, entry, spec)
+    assert sensor.available is True
+
+
+def test_sensor_handle_update_no_write_when_unchanged() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=0.1,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    coordinator._state = ConnectionState.CONNECTED
+    coordinator.data = {"navigation.speedOverGround": 10.0}
+    coordinator._last_update_by_path["navigation.speedOverGround"] = dt_util.utcnow()
+
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+    sensor._last_write = time.monotonic()
+    sensor._last_native_value = 10.0
+    sensor._last_available = True
+    sensor.async_write_ha_state = Mock()
+
+    sensor._handle_coordinator_update()
+
+    sensor.async_write_ha_state.assert_not_called()
+
+
+def test_sensor_helpers_last_seen_and_stale() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    assert _last_seen("navigation.speedOverGround", coordinator) is None
+    assert _is_stale("navigation.speedOverGround", coordinator) is True
+
+
+def test_sensor_helpers_path_available() -> None:
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    assert _path_available("navigation.speedOverGround", discovery) is False
+
+
+def test_sensor_helpers_path_available_true() -> None:
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    assert _path_available("navigation.speedOverGround", discovery) is True
+
+
+def test_base_sensor_defaults() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    spec = HealthSpec("connection_state", "Connection State", lambda coord: coord.connection_state)
+    sensor = SignalKHealthSensor(coordinator, entry, spec)
+    assert sensor._tolerance() is None
+    assert sensor._min_update_seconds() == DEFAULT_MIN_UPDATE_SECONDS
+
+
+def test_sensor_should_write_state_with_min_interval() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=0.0,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+    sensor._last_write = time.monotonic() - 5.0
+    sensor._last_available = True
+
+    assert sensor._should_write_state(10.0, True) is True
+
+
+def test_sensor_should_write_state_numeric_change_no_tolerance() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+    sensor._last_write = time.monotonic()
+    sensor._last_native_value = 10.0
+    sensor._last_available = True
+
+    assert sensor._should_write_state(11.0, True) is True
+
+
+def test_device_info_uses_base_url() -> None:
+    entry = _make_entry()
+    info = _device_info(entry)
+    assert info["name"] == "ONA"
+    assert info["configuration_url"] == entry.data[CONF_BASE_URL]
+
+
+def test_sensor_specs_empty_without_data() -> None:
+    discovery = SimpleNamespace(data=None)
+    assert _sensor_specs(discovery) == []
+
+
+def test_path_from_unique_id_sensor() -> None:
+    assert _path_from_unique_id(None) is None
+    assert _path_from_unique_id("bad") is None
+    assert _path_from_unique_id("signalk:entry") is None
+    assert _path_from_unique_id("signalk:entry:navigation.speed") == "navigation.speed"
