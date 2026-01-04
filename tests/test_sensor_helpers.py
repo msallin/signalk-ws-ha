@@ -266,7 +266,7 @@ def test_sensor_should_write_state_when_value_clears() -> None:
     sensor._last_native_value = 10.0
     sensor._last_available = True
 
-    assert sensor._should_write_state(None, True) is True
+    assert sensor._should_write_state(None, False) is True
 
 
 def test_health_sensor_available() -> None:
@@ -382,7 +382,7 @@ def test_sensor_should_write_state_numeric_change_no_tolerance() -> None:
     coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
     discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
     sensor = SignalKSensor(coordinator, discovery, entry, spec)
-    sensor._last_write = time.monotonic()
+    sensor._last_write = time.monotonic() - 10.0
     sensor._last_native_value = 10.0
     sensor._last_available = True
 

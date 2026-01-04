@@ -23,6 +23,19 @@ def build_subscribe_payload(
         if path in seen:
             continue
         period = raw.get("period", DEFAULT_PERIOD_MS)
-        subscribe.append({"path": path, "period": int(period), "format": fmt, "policy": policy})
+        if period is None:
+            period = DEFAULT_PERIOD_MS
+        min_period = raw.get("minPeriod", period)
+        if min_period is None:
+            min_period = period
+        subscribe.append(
+            {
+                "path": path,
+                "period": int(period),
+                "minPeriod": int(min_period),
+                "format": fmt,
+                "policy": policy,
+            }
+        )
         seen.add(path)
     return {"context": context, "subscribe": subscribe}

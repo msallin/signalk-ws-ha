@@ -83,4 +83,30 @@ def test_tolerance_triggers_large_changes(hass) -> None:
     sensor._last_available = True
     sensor._last_write = time.monotonic()
 
+    sensor._last_write = time.monotonic() - 120.0
     assert sensor._should_write_state(1.5, True) is True
+
+
+def test_min_interval_blocks_large_changes(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed",
+        kind="sensor",
+        unit="kn",
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=0.1,
+        min_update_seconds=60.0,
+    )
+    sensor = SignalKSensor(coordinator, Mock(), entry, spec)
+
+    sensor._last_native_value = 1.0
+    sensor._last_available = True
+    sensor._last_write = time.monotonic()
+
+    assert sensor._should_write_state(2.0, True) is False

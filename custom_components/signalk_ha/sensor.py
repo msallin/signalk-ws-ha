@@ -181,8 +181,8 @@ class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
 
         now = time.monotonic()
         min_interval = self._min_update_seconds()
-        if now - self._last_write >= min_interval:
-            return True
+        if now - self._last_write < min_interval:
+            return False
 
         if value is None and self._last_native_value is not None:
             return True
@@ -254,7 +254,9 @@ class SignalKSensor(SignalKBaseSensor):
         return self._spec.tolerance
 
     def _min_update_seconds(self) -> float:
-        return self._spec.min_update_seconds or DEFAULT_MIN_UPDATE_SECONDS
+        if self._spec.min_update_seconds is None:
+            return DEFAULT_MIN_UPDATE_SECONDS
+        return self._spec.min_update_seconds
 
 
 class SignalKHealthSensor(SignalKBaseSensor):

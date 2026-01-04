@@ -240,6 +240,7 @@ async def test_send_subscribe_payload(hass) -> None:
     payload = json.loads(ws.send_str.call_args.args[0])
     assert payload["subscribe"][0]["path"] == "navigation.speedOverGround"
     assert payload["subscribe"][0]["period"] == 1000
+    assert payload["subscribe"][0]["minPeriod"] == 1000
 
 
 async def test_async_update_paths_triggers_resubscribe(hass) -> None:

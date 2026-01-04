@@ -409,6 +409,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             fmt=DEFAULT_FORMAT,
             policy=DEFAULT_POLICY,
         )
+        _LOGGER.debug("Signal K subscribe payload: %s", payload)
         await ws.send_str(json.dumps(payload))
         _LOGGER.info("Sent subscribe for %s paths", len(self._paths))
 

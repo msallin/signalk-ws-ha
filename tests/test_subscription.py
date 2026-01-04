@@ -19,6 +19,7 @@ def test_build_subscribe_payload_sanitizes_paths() -> None:
             {
                 "path": "navigation.speedOverGround",
                 "period": 1000,
+                "minPeriod": 1000,
                 "format": "delta",
                 "policy": "ideal",
             }
@@ -39,12 +40,14 @@ def test_build_subscribe_payload_skips_invalid_items() -> None:
         {
             "path": "navigation.speedOverGround",
             "period": DEFAULT_PERIOD_MS,
+            "minPeriod": DEFAULT_PERIOD_MS,
             "format": "delta",
             "policy": "ideal",
         },
         {
             "path": "navigation.depth",
             "period": 500,
+            "minPeriod": 500,
             "format": "delta",
             "policy": "ideal",
         },
@@ -62,6 +65,25 @@ def test_build_subscribe_payload_defaults_period() -> None:
         {
             "path": "navigation.speedOverGround",
             "period": DEFAULT_PERIOD_MS,
+            "minPeriod": DEFAULT_PERIOD_MS,
+            "format": "delta",
+            "policy": "ideal",
+        }
+    ]
+
+
+def test_build_subscribe_payload_handles_none_periods() -> None:
+    payload = build_subscribe_payload(
+        "vessels.self",
+        [
+            {"path": "navigation.depth", "period": None, "minPeriod": None},
+        ],
+    )
+    assert payload["subscribe"] == [
+        {
+            "path": "navigation.depth",
+            "period": DEFAULT_PERIOD_MS,
+            "minPeriod": DEFAULT_PERIOD_MS,
             "format": "delta",
             "policy": "ideal",
         }
