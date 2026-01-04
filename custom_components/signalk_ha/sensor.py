@@ -26,7 +26,10 @@ from .const import (
     HEALTH_SENSOR_LAST_MESSAGE,
     HEALTH_SENSOR_RECONNECT_COUNT,
     HEALTH_SENSOR_LAST_NOTIFICATION,
+    HEALTH_SENSOR_MESSAGE_COUNT,
+    HEALTH_SENSOR_MESSAGES_PER_HOUR,
     HEALTH_SENSOR_NOTIFICATION_COUNT,
+    HEALTH_SENSOR_NOTIFICATIONS_PER_HOUR,
 )
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
 from .discovery import DiscoveredEntity, convert_value
@@ -43,6 +46,7 @@ class HealthSpec:
     always_available: bool = True
     enabled_default: bool = True
     attributes_fn: Callable[[Any], dict[str, Any]] | None = None
+    unit: str | None = None
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:
@@ -93,6 +97,12 @@ async def async_setup_entry(
             enabled_default=False,
         ),
         HealthSpec(
+            HEALTH_SENSOR_MESSAGE_COUNT,
+            "Message Count",
+            lambda coord: coord.message_count,
+            enabled_default=False,
+        ),
+        HealthSpec(
             HEALTH_SENSOR_RECONNECT_COUNT,
             "Reconnect Count",
             lambda coord: coord.reconnect_count,
@@ -108,11 +118,25 @@ async def async_setup_entry(
             lambda coord: coord.notification_count,
         ),
         HealthSpec(
+            HEALTH_SENSOR_MESSAGES_PER_HOUR,
+            "Messages per Hour",
+            lambda coord: coord.messages_per_hour,
+            unit="1/h",
+            enabled_default=False,
+        ),
+        HealthSpec(
             HEALTH_SENSOR_LAST_NOTIFICATION,
             "Last Notification",
             lambda coord: coord.last_notification_timestamp,
             device_class=SensorDeviceClass.TIMESTAMP,
             attributes_fn=_last_notification_attributes,
+        ),
+        HealthSpec(
+            HEALTH_SENSOR_NOTIFICATIONS_PER_HOUR,
+            "Notifications per Hour",
+            lambda coord: coord.notifications_per_hour,
+            unit="1/h",
+            enabled_default=False,
         ),
     ]
 
@@ -288,6 +312,8 @@ class SignalKHealthSensor(SignalKBaseSensor):
         self._attr_entity_registry_enabled_default = spec.enabled_default
         if spec.device_class:
             self._attr_device_class = spec.device_class
+        if spec.unit:
+            self._attr_native_unit_of_measurement = spec.unit
 
     @property
     def available(self) -> bool:

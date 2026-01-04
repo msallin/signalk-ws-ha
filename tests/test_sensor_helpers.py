@@ -129,6 +129,19 @@ def test_health_sensor_attributes() -> None:
     assert "received_at" in attrs
 
 
+def test_health_sensor_unit() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    spec = HealthSpec(
+        "messages_per_hour",
+        "Messages per Hour",
+        lambda coord: coord.messages_per_hour,
+        unit="1/h",
+    )
+    sensor = SignalKHealthSensor(coordinator, entry, spec)
+    assert sensor.native_unit_of_measurement == "1/h"
+
+
 def test_discovery_listener_adds_entities() -> None:
     entry = _make_entry()
     spec = DiscoveredEntity(

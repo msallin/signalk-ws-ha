@@ -198,6 +198,8 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._notification_cache: dict[str, tuple[tuple[Any, ...], str | None, float]] = {}
         self._notification_count = 0
         self._last_notification: dict[str, Any] | None = None
+        self._first_message_at = None
+        self._first_notification_at = None
         self._last_backoff: float = 0.0
 
         self.data = {}
@@ -296,6 +298,28 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not self._last_notification:
             return None
         return self._last_notification.get("received_at")
+
+    @property
+    def message_count(self) -> int:
+        return self._stats.messages
+
+    @property
+    def messages_per_hour(self) -> float | None:
+        if not self._first_message_at:
+            return None
+        elapsed = (dt_util.utcnow() - self._first_message_at).total_seconds()
+        if elapsed <= 0:
+            return None
+        return self._stats.messages / (elapsed / 3600.0)
+
+    @property
+    def notifications_per_hour(self) -> float | None:
+        if not self._first_notification_at:
+            return None
+        elapsed = (dt_util.utcnow() - self._first_notification_at).total_seconds()
+        if elapsed <= 0:
+            return None
+        return self._notification_count / (elapsed / 3600.0)
 
     async def async_start(self) -> None:
         if self._task is not None:
@@ -439,6 +463,8 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _handle_message(self, text: str, cfg: SignalKConfig) -> None:
         self._stats.messages += 1
         self._last_message = dt_util.utcnow()
+        if self._first_message_at is None:
+            self._first_message_at = self._last_message
 
         try:
             obj = json.loads(text)
@@ -583,6 +609,8 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._notification_cache[path] = (signature, timestamp, now)
         received_at = dt_util.utcnow()
+        if self._first_notification_at is None:
+            self._first_notification_at = received_at
         event_data = {
             "path": path,
             "value": value,

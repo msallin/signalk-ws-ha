@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
@@ -8,6 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from aiohttp import WSMsgType, WSServerHandshakeError
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.signalk_ha.auth import AuthRequired, SignalKAuthManager
@@ -83,12 +85,25 @@ def test_notification_properties() -> None:
     assert coordinator.notification_count == 0
     assert coordinator.last_notification is None
     assert coordinator.last_notification_timestamp is None
+    assert coordinator.messages_per_hour is None
+    assert coordinator.notifications_per_hour is None
 
     coordinator._notification_count = 3
     coordinator._last_notification = {"received_at": "2026-01-03T00:00:00Z"}
     assert coordinator.notification_count == 3
     assert coordinator.last_notification == {"received_at": "2026-01-03T00:00:00Z"}
     assert coordinator.last_notification_timestamp == "2026-01-03T00:00:00Z"
+
+
+def test_rate_properties_compute_per_hour() -> None:
+    coordinator = SignalKCoordinator(Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._stats.messages = 10
+    coordinator._first_message_at = dt_util.utcnow() - timedelta(hours=2)
+    coordinator._notification_count = 4
+    coordinator._first_notification_at = dt_util.utcnow() - timedelta(hours=1)
+
+    assert coordinator.messages_per_hour == pytest.approx(5.0, rel=1e-2)
+    assert coordinator.notifications_per_hour == pytest.approx(4.0, rel=1e-2)
 
 
 def test_handle_message_updates_cache(hass) -> None:
