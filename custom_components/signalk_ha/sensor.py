@@ -25,6 +25,8 @@ from .const import (
     HEALTH_SENSOR_LAST_ERROR,
     HEALTH_SENSOR_LAST_MESSAGE,
     HEALTH_SENSOR_RECONNECT_COUNT,
+    HEALTH_SENSOR_LAST_NOTIFICATION,
+    HEALTH_SENSOR_NOTIFICATION_COUNT,
 )
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
 from .discovery import DiscoveredEntity, convert_value
@@ -40,6 +42,7 @@ class HealthSpec:
     device_class: SensorDeviceClass | None = None
     always_available: bool = True
     enabled_default: bool = True
+    attributes_fn: Callable[[Any], dict[str, Any]] | None = None
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:
@@ -98,6 +101,18 @@ async def async_setup_entry(
             HEALTH_SENSOR_LAST_ERROR,
             "Last Error",
             lambda coord: coord.last_error,
+        ),
+        HealthSpec(
+            HEALTH_SENSOR_NOTIFICATION_COUNT,
+            "Notification Count",
+            lambda coord: coord.notification_count,
+        ),
+        HealthSpec(
+            HEALTH_SENSOR_LAST_NOTIFICATION,
+            "Last Notification",
+            lambda coord: coord.last_notification_timestamp,
+            device_class=SensorDeviceClass.TIMESTAMP,
+            attributes_fn=_last_notification_attributes,
         ),
     ]
 
@@ -281,6 +296,12 @@ class SignalKHealthSensor(SignalKBaseSensor):
     def native_value(self) -> Any:
         return self._spec.value_fn(self.coordinator)
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._spec.attributes_fn:
+            return {}
+        return self._spec.attributes_fn(self.coordinator) or {}
+
 
 class _SignalKDiscoveryListener:
     def __init__(
@@ -345,3 +366,14 @@ def _path_from_unique_id(unique_id: str | None) -> str | None:
     if len(parts) != 3:
         return None
     return parts[2]
+
+
+def _last_notification_attributes(coordinator: SignalKCoordinator) -> dict[str, Any] | None:
+    notification = coordinator.last_notification
+    if not notification:
+        return None
+    attrs = dict(notification)
+    received_at = attrs.get("received_at")
+    if received_at:
+        attrs["received_at"] = dt_util.as_utc(received_at).isoformat()
+    return attrs

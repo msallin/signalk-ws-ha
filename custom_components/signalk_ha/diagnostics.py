@@ -34,6 +34,13 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     auth_last_success_iso = (
         dt_util.as_utc(auth_last_success).isoformat() if auth_last_success else None
     )
+    last_notification = coordinator.last_notification
+    if last_notification and last_notification.get("received_at"):
+        received_at = last_notification["received_at"]
+        last_notification = {
+            **last_notification,
+            "received_at": dt_util.as_utc(received_at).isoformat(),
+        }
 
     return {
         "config": {
@@ -57,6 +64,10 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "last_message": last_message_iso,
         "last_rest_refresh": last_refresh_iso,
         "subscribed_path_count": len(coordinator.subscribed_paths),
+        "notifications": {
+            "count": coordinator.notification_count,
+            "last": last_notification,
+        },
         "metadata_conflicts": [
             {
                 "path": conflict.path,

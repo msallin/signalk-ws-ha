@@ -78,6 +78,19 @@ def test_expected_contexts_with_prefixed_vessel_id() -> None:
     assert "vessels.vessels.urn:boat:1" not in contexts
 
 
+def test_notification_properties() -> None:
+    coordinator = SignalKCoordinator(Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    assert coordinator.notification_count == 0
+    assert coordinator.last_notification is None
+    assert coordinator.last_notification_timestamp is None
+
+    coordinator._notification_count = 3
+    coordinator._last_notification = {"received_at": "2026-01-03T00:00:00Z"}
+    assert coordinator.notification_count == 3
+    assert coordinator.last_notification == {"received_at": "2026-01-03T00:00:00Z"}
+    assert coordinator.last_notification_timestamp == "2026-01-03T00:00:00Z"
+
+
 def test_handle_message_updates_cache(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)

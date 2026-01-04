@@ -28,6 +28,7 @@ from custom_components.signalk_ha.sensor import (
     _device_info,
     _is_stale,
     _last_seen,
+    _last_notification_attributes,
     _path_available,
     _path_from_unique_id,
     _registry_sensor_specs,
@@ -105,6 +106,27 @@ def test_health_sensor_value() -> None:
     spec = HealthSpec("connection_state", "Connection State", lambda coord: coord.connection_state)
     sensor = SignalKHealthSensor(coordinator, entry, spec)
     assert sensor.native_value == coordinator.connection_state
+
+
+def test_health_sensor_attributes() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._last_notification = {
+        "path": "notifications.navigation.anchor",
+        "state": "alert",
+        "received_at": dt_util.utcnow(),
+    }
+    spec = HealthSpec(
+        "last_notification",
+        "Last Notification",
+        lambda coord: coord.last_notification_timestamp,
+        attributes_fn=_last_notification_attributes,
+    )
+    sensor = SignalKHealthSensor(coordinator, entry, spec)
+
+    attrs = sensor.extra_state_attributes
+    assert attrs["path"] == "notifications.navigation.anchor"
+    assert "received_at" in attrs
 
 
 def test_discovery_listener_adds_entities() -> None:
@@ -262,11 +284,11 @@ def test_sensor_should_write_state_when_value_clears() -> None:
     coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
     discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
     sensor = SignalKSensor(coordinator, discovery, entry, spec)
-    sensor._last_write = time.monotonic()
+    sensor._last_write = time.monotonic() - 10.0
     sensor._last_native_value = 10.0
     sensor._last_available = True
 
-    assert sensor._should_write_state(None, False) is True
+    assert sensor._should_write_state(None, True) is True
 
 
 def test_health_sensor_available() -> None:
@@ -335,6 +357,10 @@ def test_sensor_helpers_path_available_true() -> None:
     assert _path_available("navigation.speedOverGround", discovery) is True
 
 
+def test_sensor_helpers_path_available_without_discovery() -> None:
+    assert _path_available("navigation.speedOverGround", None) is True
+
+
 def test_base_sensor_defaults() -> None:
     entry = _make_entry()
     coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
@@ -342,6 +368,14 @@ def test_base_sensor_defaults() -> None:
     sensor = SignalKHealthSensor(coordinator, entry, spec)
     assert sensor._tolerance() is None
     assert sensor._min_update_seconds() == DEFAULT_MIN_UPDATE_SECONDS
+
+
+def test_health_sensor_attributes_empty() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    spec = HealthSpec("connection_state", "Connection State", lambda coord: coord.connection_state)
+    sensor = SignalKHealthSensor(coordinator, entry, spec)
+    assert sensor.extra_state_attributes == {}
 
 
 def test_sensor_should_write_state_with_min_interval() -> None:
@@ -394,6 +428,11 @@ def test_device_info_uses_base_url() -> None:
     info = _device_info(entry)
     assert info["name"] == "ONA"
     assert info["configuration_url"] == entry.data[CONF_BASE_URL]
+
+
+def test_last_notification_attributes_none() -> None:
+    coordinator = SignalKCoordinator(Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    assert _last_notification_attributes(coordinator) is None
 
 
 def test_sensor_specs_empty_without_data() -> None:

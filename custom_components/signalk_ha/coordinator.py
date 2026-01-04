@@ -196,6 +196,8 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._paths: list[str] = []
         self._periods: dict[str, int] = {}
         self._notification_cache: dict[str, tuple[tuple[Any, ...], str | None, float]] = {}
+        self._notification_count = 0
+        self._last_notification: dict[str, Any] | None = None
         self._last_backoff: float = 0.0
 
         self.data = {}
@@ -280,6 +282,20 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @property
     def auth_token_present(self) -> bool:
         return self._auth.token_present
+
+    @property
+    def notification_count(self) -> int:
+        return self._notification_count
+
+    @property
+    def last_notification(self) -> dict[str, Any] | None:
+        return dict(self._last_notification) if self._last_notification else None
+
+    @property
+    def last_notification_timestamp(self):
+        if not self._last_notification:
+            return None
+        return self._last_notification.get("received_at")
 
     async def async_start(self) -> None:
         if self._task is not None:
@@ -558,21 +574,24 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return
 
         self._notification_cache[path] = (signature, timestamp, now)
-        self.hass.bus.async_fire(
-            EVENT_SIGNAL_K_NOTIFICATION,
-            {
-                "path": path,
-                "value": value,
-                "state": state,
-                "message": message,
-                "method": method,
-                "timestamp": timestamp,
-                "source": source,
-                "vessel_id": cfg.vessel_id,
-                "vessel_name": cfg.vessel_name,
-                "entry_id": self._entry.entry_id,
-            },
-        )
+        received_at = dt_util.utcnow()
+        event_data = {
+            "path": path,
+            "value": value,
+            "state": state,
+            "message": message,
+            "method": method,
+            "timestamp": timestamp,
+            "source": source,
+            "vessel_id": cfg.vessel_id,
+            "vessel_name": cfg.vessel_name,
+            "entry_id": self._entry.entry_id,
+            "received_at": received_at,
+        }
+        self._notification_count += 1
+        self._last_notification = event_data
+        _LOGGER.debug("Signal K notification: %s", event_data)
+        self.hass.bus.async_fire(EVENT_SIGNAL_K_NOTIFICATION, event_data)
 
     @staticmethod
     def _notification_signature(
