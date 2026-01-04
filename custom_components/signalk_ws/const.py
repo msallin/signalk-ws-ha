@@ -5,8 +5,13 @@ CONF_PORT = "port"
 CONF_SSL = "ssl"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_CONTEXT = "context"
+CONF_PATH = "path"
 CONF_PATHS = "paths"
+CONF_SUBSCRIPTIONS = "subscriptions"
 CONF_PERIOD_MS = "period_ms"
+CONF_FORMAT = "format"
+CONF_POLICY = "policy"
+CONF_MIN_PERIOD_MS = "min_period_ms"
 CONF_PRESET = "preset"
 
 DEFAULT_PORT = 3000
@@ -14,6 +19,9 @@ DEFAULT_SSL = False
 DEFAULT_VERIFY_SSL = True
 DEFAULT_CONTEXT = "vessels.self"
 DEFAULT_PERIOD_MS = 1000
+DEFAULT_FORMAT = "delta"
+DEFAULT_POLICY = "ideal"
+DEFAULT_MIN_PERIOD_MS = 0
 
 PRESET_CUSTOM = "custom"
 PRESET_NAVIGATION = "navigation"

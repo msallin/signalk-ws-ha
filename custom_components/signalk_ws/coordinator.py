@@ -24,11 +24,12 @@ from .const import (
     CONF_PERIOD_MS,
     CONF_PORT,
     CONF_SSL,
+    CONF_SUBSCRIPTIONS,
     CONF_VERIFY_SSL,
     DEFAULT_VERIFY_SSL,
 )
 from .parser import extract_values
-from .subscription import build_subscribe_payload
+from .subscription import build_subscribe_payload, normalize_subscriptions, paths_to_subscriptions
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class SignalKConfig:
     context: str
     period_ms: int
     paths: list[str]
+    subscriptions: list[dict[str, Any]]
 
 
 @dataclass
@@ -91,8 +93,21 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         data = self._entry.data
         opts = self._entry.options
 
-        paths = opts.get(CONF_PATHS, data.get(CONF_PATHS, []))
+        if CONF_SUBSCRIPTIONS in opts:
+            subscriptions = opts.get(CONF_SUBSCRIPTIONS)
+        elif CONF_SUBSCRIPTIONS in data:
+            subscriptions = data.get(CONF_SUBSCRIPTIONS)
+        else:
+            subscriptions = None
+
         period_ms = opts.get(CONF_PERIOD_MS, data.get(CONF_PERIOD_MS, 1000))
+        if subscriptions is not None:
+            subscriptions = normalize_subscriptions(subscriptions, default_period_ms=period_ms)
+        else:
+            paths = opts.get(CONF_PATHS, data.get(CONF_PATHS, []))
+            subscriptions = paths_to_subscriptions(paths, period_ms=period_ms)
+
+        paths = [spec["path"] for spec in subscriptions]
         verify_ssl = opts.get(CONF_VERIFY_SSL, data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL))
 
         return SignalKConfig(
@@ -103,6 +118,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             context=data[CONF_CONTEXT],
             period_ms=int(period_ms),
             paths=list(paths),
+            subscriptions=list(subscriptions),
         )
 
     @property
@@ -235,7 +251,9 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return context
 
     async def _send_subscribe(self, ws, cfg: SignalKConfig) -> None:
-        payload = build_subscribe_payload(cfg.context, cfg.paths, cfg.period_ms)
+        payload = build_subscribe_payload(
+            cfg.context, cfg.subscriptions, default_period_ms=cfg.period_ms
+        )
         await ws.send_str(json.dumps(payload))
         _LOGGER.debug("Sent subscribe: %s", payload)
 

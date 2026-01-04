@@ -15,22 +15,47 @@
           "host": "Host",
           "port": "Port",
           "ssl": "Use TLS (wss)",
-          "context": "Context (usually vessels.self)",
+          "verify_ssl": "Verify TLS certificate",
+          "context": "Context (usually vessels.self)"
+        }
+      },
+      "subscription": {
+        "title": "Signal K subscription",
+        "description": "Add one subscription at a time.",
+        "data": {
+          "path": "Path",
           "period_ms": "Period (ms)",
-          "paths": "Paths (one per line)"
+          "format": "Format",
+          "policy": "Policy",
+          "min_period_ms": "Min period (ms)",
+          "add_another": "Add another subscription",
+          "include": "Include this preset path"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect. Check host, port, and TLS."
+      "cannot_connect": "Failed to connect. Check host, port, and TLS.",
+      "no_subscriptions": "Add at least one subscription."
     }
   },
   "options": {
     "step": {
       "init": {
         "data": {
+          "verify_ssl": "Verify TLS certificate",
+          "edit_subscriptions": "Edit subscriptions"
+        }
+      },
+      "subscription": {
+        "title": "Signal K subscription",
+        "description": "Add one subscription at a time.",
+        "data": {
+          "path": "Path",
           "period_ms": "Period (ms)",
-          "paths": "Paths (one per line)"
+          "format": "Format",
+          "policy": "Policy",
+          "min_period_ms": "Min period (ms)",
+          "add_another": "Add another subscription"
         }
       }
     }

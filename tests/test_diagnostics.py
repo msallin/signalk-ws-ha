@@ -18,6 +18,14 @@ async def test_diagnostics_redacts_host(hass) -> None:
         context="vessels.self",
         period_ms=1000,
         paths=["navigation.speedOverGround"],
+        subscriptions=[
+            {
+                "path": "navigation.speedOverGround",
+                "period": 1000,
+                "format": "delta",
+                "policy": "ideal",
+            }
+        ],
     )
     coordinator = SimpleNamespace(
         config=cfg,

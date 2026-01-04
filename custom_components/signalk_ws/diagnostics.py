@@ -34,6 +34,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             "context": cfg.context,
             "period_ms": cfg.period_ms,
             "paths": list(cfg.paths),
+            "subscriptions": list(cfg.subscriptions),
         },
         "connection_state": coordinator.connection_state,
         "last_error": coordinator.last_error,

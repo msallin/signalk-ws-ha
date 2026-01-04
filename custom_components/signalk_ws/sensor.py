@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -12,14 +13,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    CONF_PATHS,
+    CONF_SUBSCRIPTIONS,
     DOMAIN,
     HEALTH_SENSOR_CONNECTION_STATE,
     HEALTH_SENSOR_LAST_ERROR,
     HEALTH_SENSOR_LAST_MESSAGE,
     HEALTH_SENSOR_RECONNECT_COUNT,
 )
-from .subscription import sanitize_paths
+from .subscription import subscriptions_to_paths
 
 
 @dataclass(frozen=True)
@@ -57,14 +58,29 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
     )
 
 
+def _is_wildcard(path: str) -> bool:
+    return any(ch in path for ch in ("*", "?", "["))
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    paths = sanitize_paths(entry.options.get(CONF_PATHS, entry.data.get(CONF_PATHS, [])))
+    if CONF_SUBSCRIPTIONS in entry.options:
+        subscriptions = entry.options.get(CONF_SUBSCRIPTIONS)
+    elif CONF_SUBSCRIPTIONS in entry.data:
+        subscriptions = entry.data.get(CONF_SUBSCRIPTIONS)
+    else:
+        subscriptions = None
+
+    paths = subscriptions_to_paths(subscriptions)
+    if subscriptions is None:
+        paths = subscriptions_to_paths(coordinator.config.subscriptions)
 
     entities: list[SensorEntity] = []
-    for path in paths:
+    exact_paths = [path for path in paths if not _is_wildcard(path)]
+    wildcard_paths = [path for path in paths if _is_wildcard(path)]
+    for path in exact_paths:
         entities.append(
             SignalKSensor(
                 coordinator,
@@ -101,6 +117,17 @@ async def async_setup_entry(
         entities.append(SignalKHealthSensor(coordinator, entry, spec))
 
     async_add_entities(entities)
+
+    if wildcard_paths:
+        manager = _SignalKDynamicSensors(
+            coordinator,
+            entry,
+            wildcard_paths,
+            async_add_entities,
+            known_paths=set(exact_paths),
+        )
+        unsubscribe = manager.start()
+        entry.async_on_unload(unsubscribe)
 
 
 class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
@@ -157,3 +184,48 @@ class SignalKHealthSensor(SignalKBaseSensor):
     @property
     def native_value(self) -> Any:
         return self._spec.value_fn(self.coordinator)
+
+
+class _SignalKDynamicSensors:
+    def __init__(
+        self,
+        coordinator,
+        entry: ConfigEntry,
+        patterns: list[str],
+        async_add_entities: AddEntitiesCallback,
+        *,
+        known_paths: set[str] | None = None,
+    ) -> None:
+        self._coordinator = coordinator
+        self._entry = entry
+        self._patterns = patterns
+        self._async_add_entities = async_add_entities
+        self._known_paths = known_paths or set()
+
+    def start(self) -> Callable[[], None]:
+        self._add_matching_paths(self._coordinator.data.keys())
+        return self._coordinator.async_add_listener(self._handle_update)
+
+    def _handle_update(self) -> None:
+        self._add_matching_paths(self._coordinator.data.keys())
+
+    def _add_matching_paths(self, paths: Any) -> None:
+        new_entities: list[SensorEntity] = []
+        for path in paths:
+            if not isinstance(path, str):
+                continue
+            if path in self._known_paths:
+                continue
+            if not any(fnmatch.fnmatchcase(path, pattern) for pattern in self._patterns):
+                continue
+            self._known_paths.add(path)
+            new_entities.append(
+                SignalKSensor(
+                    self._coordinator,
+                    self._entry,
+                    SignalKPathSpec(path=path, name=_default_name_for_path(path)),
+                )
+            )
+
+        if new_entities:
+            self._async_add_entities(new_entities)

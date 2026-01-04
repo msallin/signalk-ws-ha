@@ -14,7 +14,9 @@ Signal K WebSocket integration for Home Assistant. It connects to a Signal K ser
 
 - WebSocket endpoint is fixed: `/signalk/v1/stream?subscribe=none`.
 - After connect, the integration sends a subscription payload with `format=delta` and `policy=ideal`.
-- Paths are one per line. Blank lines and lines starting with `#` are ignored.
+- Each subscription can override `period`, `format`, `policy`, and `minPeriod`.
+- Wildcard paths (for example `navigation.*`) create sensors dynamically as matching data arrives.
+- If you use a self-signed certificate, disable "Verify TLS certificate".
 
 ## Health sensors
 
