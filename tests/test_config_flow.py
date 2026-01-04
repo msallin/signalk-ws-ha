@@ -15,6 +15,7 @@ from custom_components.signalk_ws.const import (
     CONF_SSL,
     CONF_SUBSCRIPTIONS,
     CONF_VERIFY_SSL,
+    CONF_VESSEL_NAME,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
     PRESET_CUSTOM,
@@ -44,6 +45,7 @@ async def test_config_flow_creates_entry(hass, enable_custom_integrations) -> No
                 CONF_SSL: False,
                 CONF_VERIFY_SSL: True,
                 CONF_CONTEXT: "vessels.self",
+                CONF_VESSEL_NAME: "ONA",
             },
         )
 
@@ -65,6 +67,7 @@ async def test_config_flow_creates_entry(hass, enable_custom_integrations) -> No
     assert result["title"] == "Signal K (sk.local)"
     assert result["data"][CONF_SUBSCRIPTIONS][0]["path"] == "navigation.speedOverGround"
     assert result["data"][CONF_VERIFY_SSL] is DEFAULT_VERIFY_SSL
+    assert result["data"][CONF_VESSEL_NAME] == "ONA"
 
 
 async def test_config_flow_unique_id_prevents_duplicates(hass, enable_custom_integrations) -> None:
@@ -106,6 +109,7 @@ async def test_config_flow_unique_id_prevents_duplicates(hass, enable_custom_int
                 CONF_SSL: False,
                 CONF_VERIFY_SSL: True,
                 CONF_CONTEXT: "vessels.self",
+                CONF_VESSEL_NAME: "ONA",
             },
         )
 
@@ -194,6 +198,7 @@ async def test_custom_preset_defaults_to_empty_paths(hass, enable_custom_integra
                 CONF_SSL: False,
                 CONF_VERIFY_SSL: True,
                 CONF_CONTEXT: "vessels.self",
+                CONF_VESSEL_NAME: "ONA",
             },
         )
 
@@ -220,6 +225,7 @@ async def test_config_flow_stores_verify_ssl_false(hass, enable_custom_integrati
                 CONF_SSL: True,
                 CONF_VERIFY_SSL: False,
                 CONF_CONTEXT: "vessels.self",
+                CONF_VESSEL_NAME: "ONA",
             },
         )
 

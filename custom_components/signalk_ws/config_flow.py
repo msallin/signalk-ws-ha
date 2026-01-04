@@ -27,6 +27,7 @@ from .const import (
     CONF_SSL,
     CONF_SUBSCRIPTIONS,
     CONF_VERIFY_SSL,
+    CONF_VESSEL_NAME,
     DEFAULT_CONTEXT,
     DEFAULT_FORMAT,
     DEFAULT_MIN_PERIOD_MS,
@@ -36,6 +37,7 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_SSL,
     DEFAULT_VERIFY_SSL,
+    DEFAULT_VESSEL_NAME,
     DOMAIN,
     PRESET_BATTERIES,
     PRESET_CUSTOM,
@@ -142,6 +144,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_SSL: user_input[CONF_SSL],
                     CONF_VERIFY_SSL: user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                     CONF_CONTEXT: context,
+                    CONF_VESSEL_NAME: user_input[CONF_VESSEL_NAME].strip(),
                 }
                 self._pending_preset_paths = list(PRESET_PATHS.get(self._preset, DEFAULT_PATHS))
                 return await self.async_step_subscription()
@@ -153,6 +156,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_SSL, default=DEFAULT_SSL): cv.boolean,
                 vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): cv.boolean,
                 vol.Optional(CONF_CONTEXT, default=DEFAULT_CONTEXT): cv.string,
+                vol.Required(CONF_VESSEL_NAME, default=DEFAULT_VESSEL_NAME): cv.string,
             }
         )
         return self.async_show_form(step_id="config", data_schema=schema, errors=errors)
@@ -243,22 +247,29 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         current_verify_ssl = self._entry.options.get(
             CONF_VERIFY_SSL, self._entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
         )
+        current_vessel_name = self._entry.options.get(
+            CONF_VESSEL_NAME, self._entry.data.get(CONF_VESSEL_NAME, DEFAULT_VESSEL_NAME)
+        )
         if user_input is not None:
             verify_ssl = user_input.get(CONF_VERIFY_SSL, current_verify_ssl)
+            vessel_name = user_input.get(CONF_VESSEL_NAME, current_vessel_name).strip()
             if user_input.get("edit_subscriptions"):
                 self._options = dict(self._entry.options)
                 self._options[CONF_VERIFY_SSL] = verify_ssl
+                self._options[CONF_VESSEL_NAME] = vessel_name
                 self._subscriptions = []
                 return await self.async_step_subscription()
 
             options = dict(self._entry.options)
             options[CONF_VERIFY_SSL] = verify_ssl
+            options[CONF_VESSEL_NAME] = vessel_name
             options.setdefault(CONF_SUBSCRIPTIONS, _entry_subscriptions(self._entry))
             return self.async_create_entry(title="", data=options)
 
         schema = vol.Schema(
             {
                 vol.Optional(CONF_VERIFY_SSL, default=current_verify_ssl): cv.boolean,
+                vol.Optional(CONF_VESSEL_NAME, default=current_vessel_name): cv.string,
                 vol.Optional("edit_subscriptions", default=False): cv.boolean,
             }
         )

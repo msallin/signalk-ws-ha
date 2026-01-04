@@ -32,6 +32,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             "ssl": cfg.ssl,
             "verify_ssl": cfg.verify_ssl,
             "context": cfg.context,
+            "vessel_name": cfg.vessel_name,
             "period_ms": cfg.period_ms,
             "paths": list(cfg.paths),
             "subscriptions": list(cfg.subscriptions),

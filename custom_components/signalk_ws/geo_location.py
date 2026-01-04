@@ -9,7 +9,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_SUBSCRIPTIONS, DOMAIN
+from .const import CONF_SUBSCRIPTIONS, CONF_VESSEL_NAME, DEFAULT_VESSEL_NAME, DOMAIN
 from .subscription import subscriptions_to_paths
 
 _POSITION_PATH = "navigation.position"
@@ -26,6 +26,12 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
         manufacturer="Signal K",
         configuration_url=f"{scheme}://{host}:{port}",
     )
+
+
+def _vessel_name(entry: ConfigEntry) -> str:
+    name = entry.options.get(CONF_VESSEL_NAME, entry.data.get(CONF_VESSEL_NAME))
+    name = str(name).strip() if name else ""
+    return name or DEFAULT_VESSEL_NAME
 
 
 def _should_create_position(paths: list[str]) -> bool:
@@ -73,8 +79,9 @@ class SignalKGeoLocation(CoordinatorEntity, GeolocationEvent):
         host = entry.data["host"]
         port = entry.data["port"]
         context = entry.data["context"]
+        vessel = _vessel_name(entry)
 
-        self._attr_name = "Signal K Position"
+        self._attr_name = f"{vessel} Position"
         self._attr_unique_id = f"{DOMAIN}:{host}:{port}:{context}:{_POSITION_PATH}:geo"
         self._attr_source = "Signal K"
 

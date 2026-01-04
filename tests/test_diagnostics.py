@@ -16,6 +16,7 @@ async def test_diagnostics_redacts_host(hass) -> None:
         ssl=False,
         verify_ssl=True,
         context="vessels.self",
+        vessel_name="ONA",
         period_ms=1000,
         paths=["navigation.speedOverGround"],
         subscriptions=[

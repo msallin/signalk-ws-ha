@@ -10,6 +10,7 @@ def test_build_ssl_context_disabled() -> None:
         ssl=True,
         verify_ssl=False,
         context="vessels.self",
+        vessel_name="ONA",
         period_ms=1000,
         paths=["navigation.speedOverGround"],
         subscriptions=[
@@ -35,6 +36,7 @@ def test_build_ssl_context_default() -> None:
         ssl=True,
         verify_ssl=True,
         context="vessels.self",
+        vessel_name="ONA",
         period_ms=1000,
         paths=["navigation.speedOverGround"],
         subscriptions=[
@@ -57,6 +59,7 @@ def test_build_ssl_context_no_tls() -> None:
         ssl=False,
         verify_ssl=False,
         context="vessels.self",
+        vessel_name="ONA",
         period_ms=1000,
         paths=["navigation.speedOverGround"],
         subscriptions=[

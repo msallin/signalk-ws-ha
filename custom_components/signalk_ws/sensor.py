@@ -14,6 +14,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     CONF_SUBSCRIPTIONS,
+    CONF_VESSEL_NAME,
+    DEFAULT_VESSEL_NAME,
     DOMAIN,
     HEALTH_SENSOR_CONNECTION_STATE,
     HEALTH_SENSOR_LAST_ERROR,
@@ -56,6 +58,12 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
         manufacturer="Signal K",
         configuration_url=f"{scheme}://{host}:{port}",
     )
+
+
+def _vessel_name(entry: ConfigEntry) -> str:
+    name = entry.options.get(CONF_VESSEL_NAME, entry.data.get(CONF_VESSEL_NAME))
+    name = str(name).strip() if name else ""
+    return name or DEFAULT_VESSEL_NAME
 
 
 def _is_wildcard(path: str) -> bool:
@@ -149,8 +157,9 @@ class SignalKSensor(SignalKBaseSensor):
         host = entry.data["host"]
         port = entry.data["port"]
         context = entry.data["context"]
+        vessel = _vessel_name(entry)
 
-        self._attr_name = f"Signal K {spec.name}"
+        self._attr_name = f"{vessel} {spec.name}"
         self._attr_unique_id = f"{DOMAIN}:{host}:{port}:{context}:{spec.path}"
 
     @property
@@ -170,8 +179,9 @@ class SignalKHealthSensor(SignalKBaseSensor):
         host = entry.data["host"]
         port = entry.data["port"]
         context = entry.data["context"]
+        vessel = _vessel_name(entry)
 
-        self._attr_name = f"Signal K {spec.name}"
+        self._attr_name = f"{vessel} {spec.name}"
         self._attr_unique_id = f"{DOMAIN}:{host}:{port}:{context}:health:{spec.key}"
         if spec.device_class:
             self._attr_device_class = spec.device_class

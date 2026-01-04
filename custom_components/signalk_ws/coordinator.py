@@ -26,7 +26,9 @@ from .const import (
     CONF_SSL,
     CONF_SUBSCRIPTIONS,
     CONF_VERIFY_SSL,
+    CONF_VESSEL_NAME,
     DEFAULT_VERIFY_SSL,
+    DEFAULT_VESSEL_NAME,
 )
 from .parser import extract_values
 from .subscription import build_subscribe_payload, normalize_subscriptions, paths_to_subscriptions
@@ -55,6 +57,7 @@ class SignalKConfig:
     ssl: bool
     verify_ssl: bool
     context: str
+    vessel_name: str
     period_ms: int
     paths: list[str]
     subscriptions: list[dict[str, Any]]
@@ -101,6 +104,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             subscriptions = None
 
         period_ms = opts.get(CONF_PERIOD_MS, data.get(CONF_PERIOD_MS, 1000))
+        vessel_name = opts.get(CONF_VESSEL_NAME, data.get(CONF_VESSEL_NAME, DEFAULT_VESSEL_NAME))
         if subscriptions is not None:
             subscriptions = normalize_subscriptions(subscriptions, default_period_ms=period_ms)
         else:
@@ -116,6 +120,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ssl=data[CONF_SSL],
             verify_ssl=bool(verify_ssl),
             context=data[CONF_CONTEXT],
+            vessel_name=str(vessel_name),
             period_ms=int(period_ms),
             paths=list(paths),
             subscriptions=list(subscriptions),

@@ -16,7 +16,8 @@
           "port": "Port",
           "ssl": "Use TLS (wss)",
           "verify_ssl": "Verify TLS certificate",
-          "context": "Context (usually vessels.self)"
+          "context": "Context (usually vessels.self)",
+          "vessel_name": "Vessel name"
         }
       },
       "subscription": {
@@ -43,6 +44,7 @@
       "init": {
         "data": {
           "verify_ssl": "Verify TLS certificate",
+          "vessel_name": "Vessel name",
           "edit_subscriptions": "Edit subscriptions"
         }
       },
