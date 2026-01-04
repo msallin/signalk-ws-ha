@@ -16,6 +16,7 @@ Signal K WebSocket integration for Home Assistant. It connects to a Signal K ser
 - After connect, the integration sends a subscription payload with `format=delta` and `policy=ideal`.
 - Each subscription can override `period`, `format`, `policy`, and `minPeriod`.
 - Wildcard paths (for example `navigation.*`) create sensors dynamically as matching data arrives.
+- When `navigation.position` is subscribed, a Geo Location entity is created for map display.
 - If you use a self-signed certificate, disable "Verify TLS certificate".
 
 ## Health sensors
