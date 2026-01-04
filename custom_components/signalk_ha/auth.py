@@ -106,13 +106,11 @@ def build_auth_headers(token: str | None) -> dict[str, str] | None:
     return {"Authorization": f"Bearer {token}"}
 
 
-def build_ssl_context(verify_ssl: bool) -> ssl.SSLContext | None:
+def build_ssl_param(verify_ssl: bool) -> ssl.SSLContext | bool | None:
+    """Return the aiohttp ssl parameter for the current TLS verification setting."""
     if verify_ssl:
         return None
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    return context
+    return False
 
 
 async def async_create_access_request(
@@ -141,7 +139,7 @@ async def async_create_access_request(
         ],
     }
 
-    ssl_context = build_ssl_context(verify_ssl)
+    ssl_context = build_ssl_param(verify_ssl)
     location = None
     async with async_timeout.timeout(10):
         async with session.post(url, ssl=ssl_context, json=payload) as resp:
@@ -201,7 +199,7 @@ async def async_fetch_access_request(
     request: AccessRequestInfo,
 ) -> dict[str, Any]:
     url = request.status_url or _access_request_status_url(base_url, request.request_id)
-    ssl_context = build_ssl_context(verify_ssl)
+    ssl_context = build_ssl_param(verify_ssl)
     async with async_timeout.timeout(10):
         async with session.get(url, ssl=ssl_context) as resp:
             if resp.status in (401, 403):

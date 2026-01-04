@@ -6,7 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 import async_timeout
 from aiohttp import ClientSession
 
-from .auth import AuthRequired, build_auth_headers, build_ssl_context
+from .auth import AuthRequired, build_auth_headers, build_ssl_param
 
 
 def normalize_base_url(host: str, port: int, use_ssl: bool) -> str:
@@ -31,7 +31,7 @@ async def async_fetch_vessel_self(
     session: ClientSession, base_url: str, verify_ssl: bool, token: str | None = None
 ) -> dict[str, Any]:
     url = urlunsplit(urlsplit(base_url)._replace(path="/signalk/v1/api/vessels/self"))
-    ssl_context = build_ssl_context(verify_ssl)
+    ssl_context = build_ssl_param(verify_ssl)
     headers = build_auth_headers(token)
 
     async with async_timeout.timeout(10):

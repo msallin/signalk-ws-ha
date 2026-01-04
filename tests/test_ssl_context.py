@@ -1,9 +1,7 @@
-import ssl
-
 from custom_components.signalk_ha.coordinator import SignalKConfig, SignalKCoordinator
 
 
-def test_build_ssl_context_disabled() -> None:
+def test_build_ssl_param_disabled() -> None:
     cfg = SignalKConfig(
         host="sk.local",
         port=3000,
@@ -16,13 +14,11 @@ def test_build_ssl_context_disabled() -> None:
         access_token=None,
     )
 
-    context = SignalKCoordinator._build_ssl_context(cfg)
-    assert isinstance(context, ssl.SSLContext)
-    assert context.verify_mode == ssl.CERT_NONE
-    assert context.check_hostname is False
+    context = SignalKCoordinator._build_ssl_param(cfg)
+    assert context is False
 
 
-def test_build_ssl_context_default() -> None:
+def test_build_ssl_param_default() -> None:
     cfg = SignalKConfig(
         host="sk.local",
         port=3000,
@@ -35,10 +31,10 @@ def test_build_ssl_context_default() -> None:
         access_token=None,
     )
 
-    assert SignalKCoordinator._build_ssl_context(cfg) is None
+    assert SignalKCoordinator._build_ssl_param(cfg) is None
 
 
-def test_build_ssl_context_no_tls() -> None:
+def test_build_ssl_param_no_tls() -> None:
     cfg = SignalKConfig(
         host="sk.local",
         port=3000,
@@ -51,4 +47,4 @@ def test_build_ssl_context_no_tls() -> None:
         access_token=None,
     )
 
-    assert SignalKCoordinator._build_ssl_context(cfg) is None
+    assert SignalKCoordinator._build_ssl_param(cfg) is None

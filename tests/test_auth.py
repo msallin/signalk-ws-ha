@@ -20,7 +20,7 @@ from custom_components.signalk_ha.auth import (
     async_fetch_access_request,
     async_poll_access_request,
     build_auth_headers,
-    build_ssl_context,
+    build_ssl_param,
 )
 
 
@@ -227,11 +227,10 @@ def test_build_auth_headers() -> None:
     assert build_auth_headers("abc") == {"Authorization": "Bearer abc"}
 
 
-def test_build_ssl_context() -> None:
-    assert build_ssl_context(True) is None
-    context = build_ssl_context(False)
-    assert context is not None
-    assert context.check_hostname is False
+def test_build_ssl_param() -> None:
+    assert build_ssl_param(True) is None
+    context = build_ssl_param(False)
+    assert context is False
 
 
 def test_extract_request_id_from_href() -> None:

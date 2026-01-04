@@ -328,7 +328,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         while not self._stop_event.is_set():
             cfg = self.config
             url = cfg.ws_url
-            ssl_context = self._build_ssl_context(cfg)
+            ssl_context = self._build_ssl_param(cfg)
             headers = build_auth_headers(self._auth.token)
 
             self._set_state(ConnectionState.CONNECTING)
@@ -505,13 +505,10 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return contexts
 
     @staticmethod
-    def _build_ssl_context(cfg: SignalKConfig) -> ssl.SSLContext | None:
+    def _build_ssl_param(cfg: SignalKConfig) -> ssl.SSLContext | bool | None:
         if not cfg.ssl or cfg.verify_ssl:
             return None
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        return context
+        return False
 
     def _start_reauth(self) -> None:
         if self._reauth_started:
