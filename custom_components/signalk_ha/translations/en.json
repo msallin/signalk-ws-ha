@@ -13,8 +13,11 @@
       },
       "auth": {
         "title": "Signal K Authorization",
-        "description": "This Signal K server requires approval. Open {approval_url} and approve the access request, then click Submit to continue."
+        "description": "This Signal K server requires approval. Open {approval_url} and approve the access request. Home Assistant continues automatically once approved."
       }
+    },
+    "progress": {
+      "auth": "Waiting for approval. Open {approval_url} and approve the access request."
     },
     "error": {
       "cannot_connect": "Failed to connect. Check host, port, and TLS.",

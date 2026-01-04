@@ -164,9 +164,10 @@ async def test_config_flow_auth_required(hass, enable_custom_integrations) -> No
             },
         )
 
-        assert result["type"] == FlowResultType.FORM
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
         assert result["step_id"] == "auth"
 
+        await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -208,9 +209,10 @@ async def test_config_flow_auth_timeout(hass, enable_custom_integrations) -> Non
                 CONF_VERIFY_SSL: True,
             },
         )
-        assert result["type"] == FlowResultType.FORM
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
         assert result["step_id"] == "auth"
 
+        await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] == FlowResultType.FORM
@@ -364,9 +366,10 @@ async def test_config_flow_auth_failed(hass, enable_custom_integrations) -> None
                 CONF_VERIFY_SSL: True,
             },
         )
-        assert result["type"] == FlowResultType.FORM
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
         assert result["step_id"] == "auth"
 
+        await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] == FlowResultType.FORM
@@ -383,7 +386,7 @@ async def test_auth_step_without_pending_data(hass) -> None:
     assert result["reason"] == "auth_cancelled"
 
 
-async def test_auth_step_shows_form_with_pending(hass) -> None:
+async def test_auth_step_shows_progress_with_pending(hass) -> None:
     from custom_components.signalk_ha.config_flow import ConfigFlow
 
     flow = ConfigFlow()
@@ -394,9 +397,12 @@ async def test_auth_step_shows_form_with_pending(hass) -> None:
         approval_url=None,
         status_url=None,
     )
+    flow._auth_task = hass.async_create_task(asyncio.Event().wait())
 
     result = await flow.async_step_auth()
-    assert result["type"] == FlowResultType.FORM
+    assert result["type"] == FlowResultType.SHOW_PROGRESS
+
+    flow._auth_task.cancel()
 
 
 async def test_config_flow_auth_step_not_supported(hass, enable_custom_integrations) -> None:
@@ -434,9 +440,10 @@ async def test_config_flow_auth_step_not_supported(hass, enable_custom_integrati
                 CONF_VERIFY_SSL: True,
             },
         )
-        assert result["type"] == FlowResultType.FORM
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
         assert result["step_id"] == "auth"
 
+        await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] == FlowResultType.FORM
@@ -478,9 +485,10 @@ async def test_config_flow_auth_rejected(hass, enable_custom_integrations) -> No
                 CONF_VERIFY_SSL: True,
             },
         )
-        assert result["type"] == FlowResultType.FORM
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
         assert result["step_id"] == "auth"
 
+        await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] == FlowResultType.FORM
@@ -522,9 +530,10 @@ async def test_config_flow_auth_invalid_response(hass, enable_custom_integration
                 CONF_VERIFY_SSL: True,
             },
         )
-        assert result["type"] == FlowResultType.FORM
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
         assert result["step_id"] == "auth"
 
+        await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] == FlowResultType.FORM
@@ -568,9 +577,10 @@ async def test_config_flow_auth_cannot_connect(hass, enable_custom_integrations)
                 CONF_VERIFY_SSL: True,
             },
         )
-        assert result["type"] == FlowResultType.FORM
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
         assert result["step_id"] == "auth"
 
+        await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] == FlowResultType.FORM
@@ -634,9 +644,10 @@ async def test_reauth_updates_token(hass, enable_custom_integrations) -> None:
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "reauth", "entry_id": entry.entry_id}
         )
-        assert result["type"] == FlowResultType.FORM
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
         assert result["step_id"] == "auth"
 
+        await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] == FlowResultType.ABORT
