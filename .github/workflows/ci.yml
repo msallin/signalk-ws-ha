@@ -17,6 +17,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
       - name: Run tests
+        env:
+          SIGNALK_TESTDATA_MAX_LINES: "500"
         run: |
           ruff check .
           black --check .

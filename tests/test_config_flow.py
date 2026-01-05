@@ -126,7 +126,7 @@ async def test_config_flow_unique_id_prevents_duplicates(hass, enable_custom_int
     assert result["reason"] == "already_configured"
 
 
-async def test_config_flow_auth_required(hass, enable_custom_integrations) -> None:
+async def test_config_flow_access_request_requires_auth(hass, enable_custom_integrations) -> None:
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     assert flow["type"] == FlowResultType.FORM
 
@@ -248,6 +248,36 @@ async def test_config_flow_auth_not_supported(hass, enable_custom_integrations) 
 
     assert result["type"] == FlowResultType.FORM
     assert result["errors"]["base"] == "auth_not_supported"
+
+
+async def test_config_flow_auth_required(hass, enable_custom_integrations) -> None:
+    flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
+            new=AsyncMock(side_effect=AuthRequired()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_create_access_request",
+            new=AsyncMock(side_effect=AuthRequired()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_get_clientsession",
+            return_value=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            flow["flow_id"],
+            {
+                CONF_HOST: "sk.local",
+                CONF_PORT: 3000,
+                CONF_SSL: False,
+                CONF_VERIFY_SSL: True,
+            },
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == "auth_required"
 
 
 async def test_config_flow_access_request_cannot_connect(hass, enable_custom_integrations) -> None:
@@ -733,6 +763,40 @@ async def test_reauth_not_supported(hass, enable_custom_integrations) -> None:
 
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "auth_not_supported"
+
+
+async def test_reauth_auth_required(hass, enable_custom_integrations) -> None:
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "sk.local",
+            CONF_PORT: 3000,
+            CONF_SSL: False,
+            CONF_VERIFY_SSL: True,
+            CONF_VESSEL_ID: "mmsi:261006533",
+            CONF_VESSEL_NAME: "ONA",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_create_access_request",
+            new=AsyncMock(side_effect=AuthRequired()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_get_clientsession",
+            return_value=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "reauth", "entry_id": entry.entry_id}
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "auth_required"
 
 
 async def test_options_flow_updates_refresh_interval(hass, enable_custom_integrations) -> None:

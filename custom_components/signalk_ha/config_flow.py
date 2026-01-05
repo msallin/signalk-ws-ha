@@ -83,8 +83,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         host=host,
                         port=port,
                     )
-                except (AccessRequestUnsupported, AuthRequired):
+                except AccessRequestUnsupported:
                     errors["base"] = "auth_not_supported"
+                except AuthRequired:
+                    errors["base"] = "auth_required"
                 except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError):
                     errors["base"] = "cannot_connect"
                 else:
@@ -214,8 +216,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 host=data[CONF_HOST],
                 port=data[CONF_PORT],
             )
-        except (AccessRequestUnsupported, AuthRequired):
+        except AccessRequestUnsupported:
             return self.async_abort(reason="auth_not_supported")
+        except AuthRequired:
+            return self.async_abort(reason="auth_required")
         except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError):
             return self.async_abort(reason="cannot_connect")
 

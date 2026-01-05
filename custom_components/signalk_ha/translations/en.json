@@ -22,12 +22,14 @@
     "error": {
       "cannot_connect": "Failed to connect. Check host, port, and TLS.",
       "invalid_response": "Signal K response was invalid.",
+      "auth_required": "This Signal K server requires credentials before access requests can be created.",
       "auth_not_supported": "Authentication is required but access requests are not supported.",
       "auth_timeout": "Access request approval timed out.",
       "auth_rejected": "Access request was rejected.",
       "auth_failed": "Authentication failed. Approve the request and try again."
     },
     "abort": {
+      "auth_required": "This Signal K server requires credentials before access requests can be created.",
       "auth_not_supported": "Authentication is required but access requests are not supported.",
       "reauth_successful": "Authentication updated.",
       "auth_cancelled": "Authentication was cancelled.",
