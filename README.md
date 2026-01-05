@@ -1,6 +1,7 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-
 # Signal K (signalk_ha)
+
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
+[![GitHub release](https://img.shields.io/github/v/release/msallin/signalk-ha)](https://github.com/msallin/signalk-ha/releases)
 
 This Home Assistant integration discovers and subscribes to a Signal K server, exposing its data as Home Assistant entities and notifications as events. [Signal K](https://signalk.org) is an open marine data platform and standard for vessel data. It first discovers available data via REST and subscribes to updates using WebSocket. Furthermore, it exposes all vessel notifications as Home Assistant events to be used in automations.
 
