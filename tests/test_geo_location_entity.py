@@ -256,6 +256,32 @@ async def test_geo_location_unavailable_when_raw_invalid(hass) -> None:
     assert geo.available is False
 
 
+async def test_geo_location_unavailable_when_raw_invalid_with_path_available(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    spec = DiscoveredEntity(
+        path="navigation.position",
+        name="Position",
+        kind="geo_location",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    discovery = SimpleNamespace(
+        data=DiscoveryResult(entities=[spec], conflicts=[]),
+        async_add_listener=Mock(return_value=lambda: None),
+    )
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._state = ConnectionState.CONNECTED
+    coordinator.data = {"navigation.position": "invalid"}
+
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    assert geo.available is False
+
+
 async def test_geo_location_unavailable_when_disconnected(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
@@ -287,6 +313,16 @@ async def test_geo_location_lat_lon_none_when_invalid(hass) -> None:
     assert geo.longitude is None
 
 
+async def test_geo_location_distance_none_when_coords_missing(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator.data = {"navigation.position": {"latitude": 1.0}}
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    assert geo.distance is None
+
+
 async def test_geo_location_handle_update_writes_state(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
@@ -315,6 +351,55 @@ async def test_geo_location_handle_update_writes_state(hass) -> None:
     geo._handle_coordinator_update()
 
     geo.async_write_ha_state.assert_called_once()
+
+
+async def test_geo_location_state_attributes_include_description(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    spec = DiscoveredEntity(
+        path="navigation.position",
+        name="Position",
+        kind="geo_location",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+        description="GPS position",
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator.data = {"navigation.position": {"latitude": 1.0, "longitude": 2.0}}
+    coordinator._last_update_by_path["navigation.position"] = dt_util.utcnow()
+    coordinator._state = ConnectionState.CONNECTED
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    assert geo.state_attributes["description"] == "GPS position"
+
+
+async def test_geo_location_state_attributes_include_last_seen(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    spec = DiscoveredEntity(
+        path="navigation.position",
+        name="Position",
+        kind="geo_location",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    timestamp = dt_util.utcnow()
+    coordinator._last_update_by_path["navigation.position"] = timestamp
+    coordinator._state = ConnectionState.CONNECTED
+    coordinator.data = {"navigation.position": {"latitude": 1.0, "longitude": 2.0}}
+
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    assert geo.state_attributes["last_seen"] == dt_util.as_utc(timestamp).isoformat()
 
 
 def test_geo_location_coords_none() -> None:

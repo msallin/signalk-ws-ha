@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_registry import EVENT_ENTITY_REGISTRY_UPDATED
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -114,6 +113,50 @@ async def test_setup_entry_continues_on_discovery_error(hass) -> None:
         patch.object(hass.config_entries, "async_forward_entry_setups", new=AsyncMock()),
     ):
         assert await async_setup_entry(hass, entry) is True
+
+
+async def test_setup_entry_uses_registry_defaults_when_discovery_missing(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"signalk:{entry.entry_id}:navigation.speedOverGround",
+        suggested_object_id="speed_over_ground",
+        config_entry=entry,
+    )
+
+    async def _refresh(self):
+        self.last_update_success = False
+        self.data = None
+
+    with (
+        patch(
+            "custom_components.signalk_ha.__init__.SignalKDiscoveryCoordinator.async_config_entry_first_refresh",
+            new=_refresh,
+        ),
+        patch(
+            "custom_components.signalk_ha.async_get_clientsession",
+            return_value=AsyncMock(),
+        ),
+        patch(
+            "custom_components.signalk_ha.__init__.SignalKCoordinator.async_start",
+            new=AsyncMock(),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", new=AsyncMock()),
+        patch(
+            "custom_components.signalk_ha.__init__.SignalKCoordinator.async_update_paths",
+            new=AsyncMock(),
+        ) as update_paths,
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    update_paths.assert_called_once()
+    paths, periods = update_paths.call_args.args
+    assert paths == ["navigation.speedOverGround", SK_PATH_NOTIFICATIONS]
+    assert periods["navigation.speedOverGround"] == DEFAULT_PERIOD_MS
 
 
 async def test_unload_entry_stops_runtime(hass) -> None:

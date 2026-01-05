@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from custom_components.signalk_ha.discovery import convert_value, discover_entities
+from custom_components.signalk_ha.mapping import Conversion
 
 
 def test_discovery_finds_expected_paths() -> None:
@@ -62,6 +63,12 @@ def test_discovery_skips_non_dict_children() -> None:
     assert "navigation.speedOverGround" in paths
 
 
+def test_discovery_skips_non_dict_scope() -> None:
+    data = {"navigation": "not-a-dict"}
+    result = discover_entities(data, scopes=("navigation",))
+    assert result.entities == []
+
+
 def test_discovery_meta_display_name_and_units() -> None:
     data = {
         "environment": {
@@ -99,5 +106,25 @@ def test_discovery_ratio_current_level_conversion() -> None:
     assert entity.tolerance is not None
 
 
+def test_discovery_records_unit_conflict() -> None:
+    data = {
+        "navigation": {
+            "speedOverGround": {"value": 1.0, "meta": {"units": "km/h"}},
+        }
+    }
+    result = discover_entities(data, scopes=("navigation",))
+    assert result.conflicts
+    conflict = result.conflicts[0]
+    assert conflict.path == "navigation.speedOverGround"
+
+
 def test_convert_value_non_numeric_returns_raw() -> None:
     assert convert_value("abc", None) == "abc"
+
+
+def test_convert_value_numeric_conversion() -> None:
+    assert convert_value(1.0, Conversion.MS_TO_KNOTS) != 1.0
+
+
+def test_convert_value_non_numeric_with_conversion() -> None:
+    assert convert_value("abc", Conversion.MS_TO_KNOTS) == "abc"

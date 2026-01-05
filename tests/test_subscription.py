@@ -88,3 +88,21 @@ def test_build_subscribe_payload_handles_none_periods() -> None:
             "policy": "ideal",
         }
     ]
+
+
+def test_build_subscribe_payload_respects_min_period_override() -> None:
+    payload = build_subscribe_payload(
+        "vessels.self",
+        [
+            {"path": "navigation.speedOverGround", "period": 5000, "minPeriod": 1000},
+        ],
+    )
+    assert payload["subscribe"] == [
+        {
+            "path": "navigation.speedOverGround",
+            "period": 5000,
+            "minPeriod": 1000,
+            "format": "delta",
+            "policy": "ideal",
+        }
+    ]

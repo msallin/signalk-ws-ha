@@ -27,8 +27,8 @@ from custom_components.signalk_ha.sensor import (
     SignalKSensor,
     _device_info,
     _is_stale,
-    _last_seen,
     _last_notification_attributes,
+    _last_seen,
     _path_available,
     _path_from_unique_id,
     _registry_sensor_specs,
@@ -444,7 +444,9 @@ def test_device_info_uses_base_url() -> None:
 
 
 def test_last_notification_attributes_none() -> None:
-    coordinator = SignalKCoordinator(Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    coordinator = SignalKCoordinator(
+        Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
+    )
     assert _last_notification_attributes(coordinator) is None
 
 

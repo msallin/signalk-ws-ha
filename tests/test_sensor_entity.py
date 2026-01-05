@@ -28,6 +28,13 @@ from custom_components.signalk_ha.sensor import (
 )
 
 
+def _find_health(entities: list[SignalKSensor | SignalKHealthSensor], name: str):
+    for entity in entities:
+        if isinstance(entity, SignalKHealthSensor) and entity.name == name:
+            return entity
+    return None
+
+
 def _make_entry() -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
@@ -236,6 +243,77 @@ async def test_sensor_setup_entry_adds_entities(hass) -> None:
 
     assert any(isinstance(entity, SignalKSensor) for entity in added)
     assert any(isinstance(entity, SignalKHealthSensor) for entity in added)
+
+
+async def test_health_sensor_defaults_for_diagnostics(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    discovery = SimpleNamespace(
+        data=DiscoveryResult(entities=[spec], conflicts=[]),
+        async_add_listener=Mock(return_value=lambda: None),
+    )
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=discovery,
+        auth=SignalKAuthManager(None),
+    )
+
+    added = []
+    await async_setup_entry(hass, entry, added.extend)
+
+    health = [entity for entity in added if isinstance(entity, SignalKHealthSensor)]
+    disabled = {entity.name for entity in health if not entity.entity_registry_enabled_default}
+    assert "Message Count" in disabled
+    assert "Messages per Hour" in disabled
+    assert "Notifications per Hour" in disabled
+
+
+async def test_message_count_updates_with_coordinator(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    discovery = SimpleNamespace(
+        data=DiscoveryResult(entities=[spec], conflicts=[]),
+        async_add_listener=Mock(return_value=lambda: None),
+    )
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=discovery,
+        auth=SignalKAuthManager(None),
+    )
+
+    added = []
+    await async_setup_entry(hass, entry, added.extend)
+    message_sensor = _find_health(added, "Message Count")
+    assert message_sensor is not None
+
+    coordinator._stats.messages = 5
+    assert message_sensor.native_value == 5
 
 
 async def test_sensor_setup_entry_without_runtime(hass) -> None:

@@ -81,12 +81,15 @@ def test_expected_contexts_with_prefixed_vessel_id() -> None:
 
 
 def test_notification_properties() -> None:
-    coordinator = SignalKCoordinator(Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    coordinator = SignalKCoordinator(
+        Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
+    )
     assert coordinator.notification_count == 0
     assert coordinator.last_notification is None
     assert coordinator.last_notification_timestamp is None
     assert coordinator.messages_per_hour is None
     assert coordinator.notifications_per_hour is None
+    assert coordinator.message_count == 0
 
     coordinator._notification_count = 3
     coordinator._last_notification = {"received_at": "2026-01-03T00:00:00Z"}
@@ -96,7 +99,9 @@ def test_notification_properties() -> None:
 
 
 def test_rate_properties_compute_per_hour() -> None:
-    coordinator = SignalKCoordinator(Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    coordinator = SignalKCoordinator(
+        Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
+    )
     coordinator._stats.messages = 10
     coordinator._first_message_at = dt_util.utcnow() - timedelta(hours=2)
     coordinator._notification_count = 4
@@ -104,6 +109,65 @@ def test_rate_properties_compute_per_hour() -> None:
 
     assert coordinator.messages_per_hour == pytest.approx(5.0, rel=1e-2)
     assert coordinator.notifications_per_hour == pytest.approx(4.0, rel=1e-2)
+
+
+def test_rate_properties_ignore_non_positive_elapsed() -> None:
+    coordinator = SignalKCoordinator(
+        Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
+    )
+    now = dt_util.utcnow()
+    coordinator._stats.messages = 10
+    coordinator._first_message_at = now + timedelta(seconds=5)
+    coordinator._notification_count = 2
+    coordinator._first_notification_at = now + timedelta(seconds=5)
+
+    assert coordinator.messages_per_hour is None
+    assert coordinator.notifications_per_hour is None
+
+
+async def test_run_inactivity_timeout_records_error(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    stop_event = asyncio.Event()
+
+    class _FakeWS:
+        def __init__(self):
+            self.closed = False
+
+        async def receive(self, timeout=None):
+            raise asyncio.TimeoutError
+
+        async def send_str(self, data):
+            return None
+
+        async def close(self):
+            self.closed = True
+
+        def exception(self):
+            return None
+
+    class _WSContext:
+        def __init__(self, ws):
+            self._ws = ws
+
+        async def __aenter__(self):
+            return self._ws
+
+        async def __aexit__(self, exc_type, exc, tb):
+            stop_event.set()
+            return False
+
+    ws = _FakeWS()
+    session.ws_connect = Mock(return_value=_WSContext(ws))
+
+    coordinator = SignalKCoordinator(hass, entry, session, Mock(), SignalKAuthManager(None))
+    coordinator._paths = []
+    coordinator._stop_event = stop_event
+
+    await coordinator._run()
+
+    assert coordinator.last_error == "Inactivity timeout"
 
 
 def test_handle_message_updates_cache(hass) -> None:
