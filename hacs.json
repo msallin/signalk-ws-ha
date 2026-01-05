@@ -1,7 +1,6 @@
 {
   "name": "Signal K HA",
   "content_in_root": false,
-  "domains": ["signalk_ha"],
   "homeassistant": "2026.1.0b0",
   "zip_release": false,
   "render_readme": true
