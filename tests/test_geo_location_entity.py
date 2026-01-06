@@ -17,6 +17,7 @@ from custom_components.signalk_ha.const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     CONF_WS_URL,
+    DEFAULT_MIN_UPDATE_SECONDS,
     DOMAIN,
 )
 from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoordinator
@@ -455,3 +456,103 @@ def test_geo_location_listener_creates_entity(hass) -> None:
     listener.handle_update()
 
     async_add.assert_called_once()
+
+
+def test_geo_location_listener_skips_when_created(hass) -> None:
+    entry = _make_entry()
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    async_add = Mock()
+
+    listener = _SignalKDiscoveryListener(
+        coordinator,
+        discovery,
+        entry,
+        async_add,
+        created=True,
+    )
+    listener.handle_update()
+
+    async_add.assert_not_called()
+
+
+def test_geo_location_listener_skips_when_missing_spec(hass) -> None:
+    entry = _make_entry()
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    async_add = Mock()
+
+    listener = _SignalKDiscoveryListener(
+        coordinator,
+        discovery,
+        entry,
+        async_add,
+        created=False,
+    )
+    listener.handle_update()
+
+    async_add.assert_not_called()
+
+
+def test_geo_location_state_attributes_omit_last_seen(hass) -> None:
+    entry = _make_entry()
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator.data = {"navigation.position": {"latitude": 1.0, "longitude": 2.0}}
+    coordinator._state = ConnectionState.CONNECTED
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    assert "last_seen" not in geo.state_attributes
+
+
+def test_geo_location_handle_update_skips_when_unchanged(hass) -> None:
+    entry = _make_entry()
+    discovery = SimpleNamespace(data=None)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._state = ConnectionState.CONNECTED
+    coordinator.data = {"navigation.position": {"latitude": 1.0, "longitude": 2.0}}
+    coordinator._last_update_by_path["navigation.position"] = dt_util.utcnow()
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    geo._last_coords = (1.0, 2.0)
+    geo._last_available = True
+    geo._last_write = time.monotonic()
+    geo.async_write_ha_state = Mock()
+
+    geo._handle_coordinator_update()
+
+    geo.async_write_ha_state.assert_not_called()
+
+
+def test_geo_location_should_write_state_available_change() -> None:
+    entry = _make_entry()
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    geo._last_coords = (1.0, 2.0)
+    geo._last_available = False
+    geo._last_write = time.monotonic()
+
+    assert geo._should_write_state((1.0, 2.0), True) is True
+
+
+def test_geo_location_should_write_state_min_interval() -> None:
+    entry = _make_entry()
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    geo._last_coords = (1.0, 2.0)
+    geo._last_available = True
+    geo._last_write = time.monotonic() - DEFAULT_MIN_UPDATE_SECONDS
+
+    assert geo._should_write_state((1.0, 2.0), True) is True
+
+
+def test_geo_location_should_write_state_when_coords_cleared() -> None:
+    entry = _make_entry()
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    geo._last_coords = (1.0, 2.0)
+    geo._last_available = True
+    geo._last_write = time.monotonic()
+
+    assert geo._should_write_state(None, True) is True

@@ -12,12 +12,14 @@ CONF_INSTANCE_ID = "instance_id"
 CONF_REFRESH_INTERVAL_HOURS = "refresh_interval_hours"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_ENABLE_NOTIFICATIONS = "enable_notifications"
+CONF_GROUPS = "groups"
 
 DEFAULT_PORT = 3000
 DEFAULT_SSL = False
 DEFAULT_VERIFY_SSL = True
 DEFAULT_REFRESH_INTERVAL_HOURS = 24
 DEFAULT_ENABLE_NOTIFICATIONS = True
+DEFAULT_GROUPS = ("navigation", "environment", "tanks")
 
 DEFAULT_PERIOD_MS = 5000
 DEFAULT_FORMAT = "delta"

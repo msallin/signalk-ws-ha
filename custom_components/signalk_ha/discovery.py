@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections import Counter
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
 from .const import DEFAULT_PERIOD_MS, SK_PATH_POSITION
 from .mapping import Conversion, apply_conversion, lookup_mapping
+from .schema import SCHEMA_GROUPS, lookup_schema
 
 _RESERVED_KEYS = {
     "meta",
@@ -18,6 +20,8 @@ _RESERVED_KEYS = {
     "pgn",
     "sentence",
 }
+
+_GENERIC_PREFIXES = frozenset(SCHEMA_GROUPS)
 
 
 @dataclass(frozen=True)
@@ -65,10 +69,15 @@ def discover_entities(data: dict[str, Any], scopes: Iterable[str]) -> DiscoveryR
     conflicts: list[MetadataConflict] = []
     # Treat REST discovery as a snapshot; it is safe to re-run and merge without deleting.
     for scope in scopes:
+        if scope == "notifications":
+            continue
         node = data.get(scope)
         if isinstance(node, dict):
             _walk(node, scope, entities, conflicts)
-    return DiscoveryResult(entities=entities, conflicts=conflicts)
+    return DiscoveryResult(
+        entities=_disambiguate_entities(entities),
+        conflicts=conflicts,
+    )
 
 
 def _walk(
@@ -98,9 +107,15 @@ def _add_entity(
     value = node.get("value")
     meta = node.get("meta") if isinstance(node.get("meta"), dict) else {}
     meta_units = meta.get("units") if isinstance(meta, dict) else None
+    schema_info = lookup_schema(path)
+    schema_units = schema_info.units if schema_info else None
+    schema_description = schema_info.description if schema_info else None
 
     if path == SK_PATH_POSITION:
-        description = meta.get("description") if isinstance(meta.get("description"), str) else None
+        description = schema_description
+        if description is None:
+            meta_description = meta.get("description")
+            description = meta_description if isinstance(meta_description, str) else None
         entities.append(
             DiscoveredEntity(
                 path=path,
@@ -128,6 +143,8 @@ def _add_entity(
     if isinstance(description, str) and "url" in description.lower():
         return
     description = description if isinstance(description, str) else None
+    if schema_description:
+        description = schema_description
 
     mapping = lookup_mapping(path)
     if mapping and meta_units and mapping.expected_units:
@@ -141,11 +158,12 @@ def _add_entity(
             )
 
     name = _display_name(path, meta)
-    conversion = mapping.conversion if mapping else _conversion_from_meta(path, meta_units)
-    unit = mapping.unit if mapping else _unit_from_meta(meta_units, conversion)
+    units_hint = schema_units or meta_units
+    conversion = mapping.conversion if mapping else _conversion_from_meta(path, units_hint)
+    unit = mapping.unit if mapping else _unit_from_meta(units_hint, conversion)
     device_class = mapping.device_class if mapping else None
     state_class = mapping.state_class if mapping else None
-    tolerance = mapping.tolerance if mapping else _tolerance_from_meta(meta_units)
+    tolerance = mapping.tolerance if mapping else _tolerance_from_meta(units_hint)
     min_update_seconds = mapping.min_update_seconds if mapping else None
 
     period_ms = (
@@ -176,8 +194,68 @@ def _display_name(path: str, meta: dict[str, Any]) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     last = path.split(".")[-1]
-    spaced = "".join((" " + c if c.isupper() else c) for c in last).strip()
-    return spaced[:1].upper() + spaced[1:]
+    return _humanize_segment(last)
+
+
+def _humanize_segment(segment: str) -> str:
+    if not segment:
+        return ""
+    spaced = "".join((" " + c if c.isupper() else c) for c in segment).strip()
+    spaced = spaced.replace("_", " ")
+    return spaced[:1].upper() + spaced[1:] if spaced else ""
+
+
+def _humanize_parts(parts: Iterable[str]) -> str:
+    return " ".join(_humanize_segment(part) for part in parts if part)
+
+
+def _disambiguate_entities(entities: list[DiscoveredEntity]) -> list[DiscoveredEntity]:
+    counts = Counter(entity.name for entity in entities)
+    if not counts or max(counts.values()) <= 1:
+        return entities
+    disambiguated: list[DiscoveredEntity] = []
+    for entity in entities:
+        if counts[entity.name] <= 1:
+            disambiguated.append(entity)
+            continue
+        disambiguated.append(
+            replace(
+                entity,
+                name=_disambiguated_name(entity.path, entity.name),
+            )
+        )
+    return disambiguated
+
+
+def _disambiguated_name(path: str, base_name: str) -> str:
+    prefix_parts = _prefix_parts_for_path(path)
+    if not prefix_parts:
+        return base_name
+    prefix = _humanize_parts(prefix_parts)
+    if not prefix:
+        return base_name
+    if base_name.lower().startswith(prefix.lower()):
+        return base_name
+    return f"{prefix} {base_name}"
+
+
+def _prefix_parts_for_path(path: str) -> list[str]:
+    parts = path.split(".")
+    if len(parts) < 2:
+        return []
+    prefix_parts = parts[:-1]
+    index: str | None = None
+    for part in reversed(prefix_parts):
+        if part.isdigit():
+            if index is None:
+                index = part
+            continue
+        if part in _GENERIC_PREFIXES:
+            continue
+        return [part, index] if index else [part]
+    if prefix_parts and prefix_parts[-1].isdigit() and len(prefix_parts) >= 2:
+        return [prefix_parts[-2], prefix_parts[-1]]
+    return [prefix_parts[-1]] if prefix_parts else []
 
 
 def _unit_from_meta(meta_units: Any, conversion: Conversion | None) -> str | None:

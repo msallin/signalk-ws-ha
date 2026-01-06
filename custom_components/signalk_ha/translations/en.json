@@ -8,7 +8,8 @@
           "host": "Host",
           "port": "Port",
           "ssl": "Use TLS (https/wss)",
-          "verify_ssl": "Verify TLS certificate (disable for self-signed)"
+          "verify_ssl": "Verify TLS certificate (disable for self-signed)",
+          "groups": "Data groups to include"
         }
       },
       "auth": {
@@ -41,7 +42,8 @@
       "init": {
         "data": {
           "refresh_interval_hours": "Discovery refresh interval (hours)",
-          "enable_notifications": "Enable Signal K notification events"
+          "enable_notifications": "Enable Signal K notification events",
+          "groups": "Data groups to include"
         }
       }
     }

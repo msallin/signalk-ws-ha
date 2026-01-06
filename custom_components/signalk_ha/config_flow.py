@@ -24,6 +24,7 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
     CONF_ENABLE_NOTIFICATIONS,
+    CONF_GROUPS,
     CONF_HOST,
     CONF_INSTANCE_ID,
     CONF_PORT,
@@ -34,6 +35,7 @@ from .const import (
     CONF_VESSEL_NAME,
     CONF_WS_URL,
     DEFAULT_ENABLE_NOTIFICATIONS,
+    DEFAULT_GROUPS,
     DEFAULT_PORT,
     DEFAULT_REFRESH_INTERVAL_HOURS,
     DEFAULT_SSL,
@@ -47,6 +49,7 @@ from .rest import (
     normalize_host_input,
     normalize_ws_url,
 )
+from .schema import SCHEMA_GROUPS
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -90,6 +93,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError):
                     errors["base"] = "cannot_connect"
                 else:
+                    groups = _normalize_groups(user_input.get(CONF_GROUPS))
                     self._pending_data = {
                         CONF_HOST: host,
                         CONF_PORT: port,
@@ -97,6 +101,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
                         CONF_BASE_URL: base_url,
                         CONF_WS_URL: ws_url,
+                        CONF_GROUPS: groups,
                     }
                     self._access_request = access_request
                     self._auth_task = None
@@ -106,6 +111,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except ValueError:
                 errors["base"] = "invalid_response"
             else:
+                groups = _normalize_groups(user_input.get(CONF_GROUPS))
                 return await self._async_finish_setup(
                     host=host,
                     port=port,
@@ -115,14 +121,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ws_url=ws_url,
                     vessel_data=vessel_data,
                     access_token=None,
+                    groups=groups,
                 )
 
+        group_options = _group_options()
         schema = vol.Schema(
             {
                 vol.Required(CONF_HOST): cv.string,
                 vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
                 vol.Optional(CONF_SSL, default=DEFAULT_SSL): cv.boolean,
                 vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): cv.boolean,
+                vol.Optional(CONF_GROUPS, default=list(DEFAULT_GROUPS)): cv.multi_select(
+                    group_options
+                ),
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
@@ -189,6 +200,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ws_url=self._pending_data[CONF_WS_URL],
                 vessel_data=vessel_data,
                 access_token=token,
+                groups=_normalize_groups(self._pending_data.get(CONF_GROUPS)),
             )
 
         self._auth_task = None
@@ -230,6 +242,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_VERIFY_SSL: data[CONF_VERIFY_SSL],
             CONF_BASE_URL: base_url,
             CONF_WS_URL: ws_url,
+            CONF_GROUPS: data.get(CONF_GROUPS),
         }
         self._access_request = access_request
         self._auth_task = None
@@ -258,6 +271,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         ws_url: str,
         vessel_data: dict[str, Any],
         access_token: str | None,
+        groups: list[str],
     ) -> FlowResult:
         identity = resolve_vessel_identity(vessel_data, base_url)
         instance_id = build_instance_id(base_url, identity.vessel_id)
@@ -277,6 +291,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_VESSEL_NAME: identity.vessel_name,
             CONF_INSTANCE_ID: instance_id,
             CONF_REFRESH_INTERVAL_HOURS: DEFAULT_REFRESH_INTERVAL_HOURS,
+            CONF_GROUPS: groups,
         }
         if access_token:
             data[CONF_ACCESS_TOKEN] = access_token
@@ -336,11 +351,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             hours = int(user_input[CONF_REFRESH_INTERVAL_HOURS])
             notifications_enabled = bool(user_input[CONF_ENABLE_NOTIFICATIONS])
+            groups = _normalize_groups(user_input.get(CONF_GROUPS))
             return self.async_create_entry(
                 title="",
                 data={
                     CONF_REFRESH_INTERVAL_HOURS: hours,
                     CONF_ENABLE_NOTIFICATIONS: notifications_enabled,
+                    CONF_GROUPS: groups,
                 },
             )
 
@@ -348,13 +365,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             CONF_REFRESH_INTERVAL_HOURS,
             self._entry.data.get(CONF_REFRESH_INTERVAL_HOURS, DEFAULT_REFRESH_INTERVAL_HOURS),
         )
+        current_groups = _normalize_groups(
+            self._entry.options.get(CONF_GROUPS, self._entry.data.get(CONF_GROUPS))
+        )
         current_notifications = self._entry.options.get(
             CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS
         )
+        group_options = _group_options()
         schema = vol.Schema(
             {
                 vol.Optional(CONF_REFRESH_INTERVAL_HOURS, default=current): vol.Coerce(int),
                 vol.Optional(CONF_ENABLE_NOTIFICATIONS, default=current_notifications): cv.boolean,
+                vol.Optional(CONF_GROUPS, default=current_groups): cv.multi_select(group_options),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
@@ -367,3 +389,16 @@ def _admin_access_url(base_url: str) -> str | None:
     if not parsed.scheme or not parsed.netloc:
         return None
     return urlunsplit((parsed.scheme, parsed.netloc, "/admin/", "", "/security/access/requests"))
+
+
+def _group_options() -> dict[str, str]:
+    return {group: group.replace("_", " ").title() for group in SCHEMA_GROUPS}
+
+
+def _normalize_groups(groups: Any | None) -> list[str]:
+    if not groups:
+        return list(DEFAULT_GROUPS)
+    selected = [group for group in groups if isinstance(group, str)]
+    allowed = set(SCHEMA_GROUPS)
+    filtered = [group for group in selected if group in allowed]
+    return filtered or list(DEFAULT_GROUPS)

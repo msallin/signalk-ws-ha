@@ -15,6 +15,7 @@ from custom_components.signalk_ha.const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
     CONF_ENABLE_NOTIFICATIONS,
+    CONF_GROUPS,
     CONF_HOST,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
@@ -22,6 +23,7 @@ from custom_components.signalk_ha.const import (
     CONF_VERIFY_SSL,
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
+    DEFAULT_GROUPS,
     DOMAIN,
 )
 
@@ -54,6 +56,7 @@ async def test_config_flow_creates_entry(hass, enable_custom_integrations) -> No
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_VESSEL_NAME] == "ONA"
     assert result["data"][CONF_VESSEL_ID] == "mmsi:261006533"
+    assert result["data"][CONF_GROUPS] == list(DEFAULT_GROUPS)
 
 
 async def test_config_flow_scheme_override(hass, enable_custom_integrations) -> None:
@@ -436,6 +439,40 @@ async def test_auth_step_shows_progress_with_pending(hass) -> None:
     flow._auth_task.cancel()
 
 
+async def test_auth_step_progress_uses_access_request_url(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow._pending_data = {CONF_BASE_URL: ""}
+    flow._access_request = AccessRequestInfo(
+        request_id="req1",
+        approval_url="http://sk.local/approve",
+        status_url=None,
+    )
+    wait_event = asyncio.Event()
+
+    async def _wait() -> None:
+        await wait_event.wait()
+
+    with patch.object(flow, "_async_poll_and_fetch", new=AsyncMock(side_effect=_wait)):
+        result = await flow.async_step_auth(user_input={})
+
+    assert result["type"] == FlowResultType.SHOW_PROGRESS
+    assert result["description_placeholders"]["approval_url"] == "http://sk.local/approve"
+    flow._auth_task.cancel()
+
+
+async def test_auth_finish_aborts_without_pending_data(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    result = await flow.async_step_auth_finish()
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "auth_cancelled"
+
+
 async def test_config_flow_auth_step_not_supported(hass, enable_custom_integrations) -> None:
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     access_request = AccessRequestInfo(
@@ -628,6 +665,25 @@ def test_admin_access_url_from_base_url() -> None:
 def test_admin_access_url_invalid() -> None:
     assert _admin_access_url("") is None
     assert _admin_access_url("http://") is None
+
+
+def test_auth_form_uses_admin_url_when_base_url_present(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow._pending_data = {CONF_BASE_URL: "http://sk.local:3000/signalk/v1/api/"}
+    flow._access_request = AccessRequestInfo(
+        request_id="req1",
+        approval_url="http://sk.local/approve",
+        status_url=None,
+    )
+
+    result = flow._show_auth_form()
+    assert (
+        result["description_placeholders"]["approval_url"]
+        == "http://sk.local:3000/admin/#/security/access/requests"
+    )
 
 
 async def test_reauth_updates_token(hass, enable_custom_integrations) -> None:
@@ -824,6 +880,7 @@ async def test_options_flow_updates_refresh_interval(hass, enable_custom_integra
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_REFRESH_INTERVAL_HOURS] == 12
     assert entry.options[CONF_ENABLE_NOTIFICATIONS] is False
+    assert entry.options[CONF_GROUPS] == list(DEFAULT_GROUPS)
 
 
 async def test_auth_form_falls_back_to_access_url(hass) -> None:

@@ -1,7 +1,14 @@
 import json
 from pathlib import Path
+from unittest.mock import patch
 
-from custom_components.signalk_ha.discovery import convert_value, discover_entities
+from custom_components.signalk_ha.discovery import (
+    _disambiguated_name,
+    _humanize_segment,
+    _prefix_parts_for_path,
+    convert_value,
+    discover_entities,
+)
 from custom_components.signalk_ha.mapping import Conversion
 
 
@@ -69,6 +76,57 @@ def test_discovery_skips_non_dict_scope() -> None:
     assert result.entities == []
 
 
+def test_discovery_skips_notifications_scope() -> None:
+    data = {"notifications": {"navigation": {"anchor": {"value": {"state": "alert"}}}}}
+    result = discover_entities(data, scopes=("notifications",))
+    assert result.entities == []
+
+
+def test_discovery_position_uses_meta_description_when_schema_missing() -> None:
+    data = {
+        "navigation": {
+            "position": {
+                "value": {"latitude": 1.0, "longitude": 2.0},
+                "meta": {"description": "GPS position"},
+            }
+        }
+    }
+    with patch("custom_components.signalk_ha.discovery.lookup_schema", return_value=None):
+        result = discover_entities(data, scopes=("navigation",))
+    entity = next(spec for spec in result.entities if spec.path == "navigation.position")
+    assert entity.description == "GPS position"
+
+
+def test_discovery_humanize_segment_empty() -> None:
+    assert _humanize_segment("") == ""
+
+
+def test_discovery_disambiguated_name_keeps_base_when_no_prefix() -> None:
+    assert _disambiguated_name("speed", "Speed") == "Speed"
+
+
+def test_discovery_disambiguated_name_skips_when_prefix_already_present() -> None:
+    name = "Navigation Speed Over Ground"
+    assert _disambiguated_name("navigation.speedOverGround", name) == name
+
+
+def test_discovery_prefix_parts_handles_digits() -> None:
+    assert _prefix_parts_for_path("tanks.fuel.0.currentLevel") == ["fuel", "0"]
+    assert _prefix_parts_for_path("tanks.0.currentLevel") == ["tanks", "0"]
+    assert _prefix_parts_for_path("speed") == []
+
+
+def test_discovery_disambiguates_duplicate_names() -> None:
+    data = {
+        "navigation": {"speedOverGround": {"value": 1}},
+        "environment": {"wind": {"speedOverGround": {"value": 2}}},
+    }
+    result = discover_entities(data, scopes=("navigation", "environment"))
+    names = {entity.path: entity.name for entity in result.entities}
+    assert names["navigation.speedOverGround"] == "Navigation Speed Over Ground"
+    assert names["environment.wind.speedOverGround"] == "Wind Speed Over Ground"
+
+
 def test_discovery_meta_display_name_and_units() -> None:
     data = {
         "environment": {
@@ -85,6 +143,38 @@ def test_discovery_meta_display_name_and_units() -> None:
     assert entity.name == "Outside Temp"
     assert entity.unit == "degC"
     assert entity.conversion is not None
+
+
+def test_discovery_schema_units_used_when_meta_missing() -> None:
+    data = {
+        "environment": {
+            "outside": {
+                "temperature": {
+                    "value": 300.0,
+                }
+            }
+        }
+    }
+    result = discover_entities(data, scopes=("environment",))
+    entity = next(spec for spec in result.entities if spec.path.endswith("temperature"))
+    assert entity.unit == "degC"
+    assert entity.conversion is not None
+
+
+def test_discovery_schema_description_overrides_meta() -> None:
+    data = {
+        "environment": {
+            "outside": {
+                "temperature": {
+                    "value": 300.0,
+                    "meta": {"description": "Custom Temp"},
+                }
+            }
+        }
+    }
+    result = discover_entities(data, scopes=("environment",))
+    entity = next(spec for spec in result.entities if spec.path.endswith("temperature"))
+    assert entity.description == "Current outside air temperature"
 
 
 def test_discovery_ratio_current_level_conversion() -> None:

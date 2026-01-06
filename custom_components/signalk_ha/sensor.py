@@ -47,6 +47,7 @@ class HealthSpec:
     enabled_default: bool = True
     attributes_fn: Callable[[Any], dict[str, Any]] | None = None
     unit: str | None = None
+    suggested_display_precision: int | None = None
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:
@@ -123,6 +124,7 @@ async def async_setup_entry(
             lambda coord: coord.messages_per_hour,
             unit="1/h",
             enabled_default=False,
+            suggested_display_precision=2,
         ),
         HealthSpec(
             HEALTH_SENSOR_LAST_NOTIFICATION,
@@ -137,6 +139,7 @@ async def async_setup_entry(
             lambda coord: coord.notifications_per_hour,
             unit="1/h",
             enabled_default=False,
+            suggested_display_precision=2,
         ),
     ]
 
@@ -314,6 +317,8 @@ class SignalKHealthSensor(SignalKBaseSensor):
             self._attr_device_class = spec.device_class
         if spec.unit:
             self._attr_native_unit_of_measurement = spec.unit
+        if spec.suggested_display_precision is not None:
+            self._attr_suggested_display_precision = spec.suggested_display_precision
 
     @property
     def available(self) -> bool:

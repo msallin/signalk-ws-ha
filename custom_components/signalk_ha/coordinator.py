@@ -23,6 +23,7 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
     CONF_ENABLE_NOTIFICATIONS,
+    CONF_GROUPS,
     CONF_HOST,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
@@ -33,6 +34,7 @@ from .const import (
     CONF_WS_URL,
     DEFAULT_ENABLE_NOTIFICATIONS,
     DEFAULT_FORMAT,
+    DEFAULT_GROUPS,
     DEFAULT_POLICY,
     DEFAULT_REFRESH_INTERVAL_HOURS,
     EVENT_SIGNAL_K_NOTIFICATION,
@@ -139,7 +141,11 @@ class SignalKDiscoveryCoordinator(DataUpdateCoordinator[DiscoveryResult]):
                 self._entry, data={**self._entry.data, CONF_VESSEL_NAME: identity.vessel_name}
             )
 
-        result = discover_entities(vessel, scopes=("environment", "tanks", "navigation"))
+        groups = self._entry.options.get(
+            CONF_GROUPS, self._entry.data.get(CONF_GROUPS, DEFAULT_GROUPS)
+        )
+        scopes = [group for group in groups if isinstance(group, str)]
+        result = discover_entities(vessel, scopes=scopes)
         self._conflicts = result.conflicts
         self._last_refresh = dt_util.utcnow()
         return result

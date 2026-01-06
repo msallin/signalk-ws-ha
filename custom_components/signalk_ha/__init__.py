@@ -13,6 +13,7 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
     CONF_ENABLE_NOTIFICATIONS,
+    CONF_GROUPS,
     CONF_HOST,
     CONF_INSTANCE_ID,
     CONF_PORT,
@@ -23,6 +24,7 @@ from .const import (
     CONF_VESSEL_NAME,
     CONF_WS_URL,
     DEFAULT_ENABLE_NOTIFICATIONS,
+    DEFAULT_GROUPS,
     DEFAULT_PERIOD_MS,
     DEFAULT_PORT,
     DEFAULT_REFRESH_INTERVAL_HOURS,
@@ -103,6 +105,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data.setdefault(CONF_VESSEL_ID, "")
     data.setdefault(CONF_VESSEL_NAME, "Unknown Vessel")
     data.setdefault(CONF_REFRESH_INTERVAL_HOURS, DEFAULT_REFRESH_INTERVAL_HOURS)
+    data.setdefault(CONF_GROUPS, list(DEFAULT_GROUPS))
 
     if CONF_INSTANCE_ID not in data:
         base_url = data.get(CONF_BASE_URL, host)

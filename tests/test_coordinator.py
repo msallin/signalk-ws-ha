@@ -32,6 +32,7 @@ from custom_components.signalk_ha.coordinator import (
     SignalKDiscoveryCoordinator,
 )
 from custom_components.signalk_ha.discovery import DiscoveryResult
+from custom_components.signalk_ha.identity import VesselIdentity
 
 
 def _make_entry(*, options: dict[str, Any] | None = None) -> MockConfigEntry:
@@ -80,6 +81,24 @@ def test_expected_contexts_with_prefixed_vessel_id() -> None:
     assert "vessels.vessels.urn:boat:1" not in contexts
 
 
+def test_expected_contexts_without_vessel_id() -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "sk.local",
+            CONF_PORT: 3000,
+            CONF_SSL: False,
+            CONF_VERIFY_SSL: True,
+            CONF_BASE_URL: "http://sk.local:3000/signalk/v1/api/",
+            CONF_WS_URL: "ws://sk.local:3000/signalk/v1/stream?subscribe=none",
+            CONF_VESSEL_ID: "",
+            CONF_VESSEL_NAME: "ONA",
+        },
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    assert coordinator._expected_contexts(coordinator.config) == ["vessels.self"]
+
+
 def test_notification_properties() -> None:
     coordinator = SignalKCoordinator(
         Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
@@ -96,6 +115,30 @@ def test_notification_properties() -> None:
     assert coordinator.notification_count == 3
     assert coordinator.last_notification == {"received_at": "2026-01-03T00:00:00Z"}
     assert coordinator.last_notification_timestamp == "2026-01-03T00:00:00Z"
+
+
+def test_coordinator_property_accessors() -> None:
+    entry = _make_entry()
+    auth = SignalKAuthManager("token")
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), auth)
+    coordinator._last_message = dt_util.utcnow()
+    coordinator._stats.reconnects = 2
+    coordinator._stats.parse_errors = 1
+    coordinator._last_update_by_path = {"navigation.speedOverGround": dt_util.utcnow()}
+    coordinator._last_source_by_path = {"navigation.speedOverGround": "src1"}
+    coordinator._last_backoff = 3.5
+    coordinator._paths = ["navigation.speedOverGround"]
+    auth.mark_failure("boom")
+
+    assert coordinator.last_message is not None
+    assert coordinator.reconnect_count == 2
+    assert coordinator.counters["parse_errors"] == 1
+    assert coordinator.last_update_by_path
+    assert coordinator.last_source_by_path
+    assert coordinator.last_backoff == 3.5
+    assert coordinator.subscribed_paths == ["navigation.speedOverGround"]
+    assert coordinator.auth_state == "failed"
+    assert coordinator.auth_last_error == "boom"
 
 
 def test_rate_properties_compute_per_hour() -> None:
@@ -330,10 +373,35 @@ def test_fire_notification_dedupes_without_timestamp(hass) -> None:
     assert events == []
 
 
+def test_fire_notification_dedupes_with_timestamp(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    events: list = []
+    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+
+    notification = {
+        "path": "notifications.navigation.anchor",
+        "value": {"state": "alert"},
+        "timestamp": "2026-01-03T22:34:57.853Z",
+        "source": "anchoralarm",
+    }
+
+    coordinator._fire_notification(notification, coordinator.config)
+    coordinator._fire_notification(notification, coordinator.config)
+
+    assert len(events) == 1
+
+
 def test_notification_signature_handles_bad_keys() -> None:
     value = {("bad",): "data"}
     signature = SignalKCoordinator._notification_signature(value, None, None, None, None)
     assert signature[-1] == repr(value)
+
+
+def test_notification_signature_scalar_value() -> None:
+    signature = SignalKCoordinator._notification_signature(42, None, None, None, None)
+    assert signature[-1] == repr(42)
 
 
 async def test_send_subscribe_payload(hass) -> None:
@@ -351,6 +419,27 @@ async def test_send_subscribe_payload(hass) -> None:
     assert payload["subscribe"][0]["path"] == "navigation.speedOverGround"
     assert payload["subscribe"][0]["period"] == 1000
     assert payload["subscribe"][0]["minPeriod"] == 1000
+
+
+def test_build_ssl_param() -> None:
+    data = dict(_make_entry().data)
+    data[CONF_SSL] = True
+    data[CONF_VERIFY_SSL] = False
+    entry = MockConfigEntry(domain=DOMAIN, data=data)
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    assert coordinator._build_ssl_param(coordinator.config) is False
+
+    data = dict(entry.data)
+    data[CONF_VERIFY_SSL] = True
+    entry = MockConfigEntry(domain=DOMAIN, data=data)
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    assert coordinator._build_ssl_param(coordinator.config) is None
+
+    data = dict(entry.data)
+    data[CONF_SSL] = False
+    entry = MockConfigEntry(domain=DOMAIN, data=data)
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    assert coordinator._build_ssl_param(coordinator.config) is None
 
 
 async def test_async_update_paths_triggers_resubscribe(hass) -> None:
@@ -429,6 +518,18 @@ def test_schedule_flush_sets_handle(hass) -> None:
 
     coordinator._flush_handle.cancel()
     coordinator._flush_handle = None
+
+
+def test_schedule_flush_immediate_resets_handle(hass) -> None:
+    coordinator = SignalKCoordinator(hass, _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    coordinator.async_set_updated_data = Mock()
+    coordinator._data_cache = {"navigation.speedOverGround": 1.0}
+    coordinator._flush_handle = hass.loop.call_later(60, lambda: None)
+
+    coordinator._schedule_flush(immediate=True)
+
+    assert coordinator._flush_handle is None
+    coordinator.async_set_updated_data.assert_called_once()
 
 
 def test_flush_updates_resets_handle(hass) -> None:
@@ -552,6 +653,17 @@ async def test_run_processes_messages_and_disconnects(hass) -> None:
         coordinator._flush_handle = None
 
 
+async def test_run_exits_when_stop_event_set(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._stop_event.set()
+
+    await coordinator._run()
+
+    assert coordinator.connection_state == "disconnected"
+
+
 async def test_run_handles_ws_auth_failure(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
@@ -638,6 +750,35 @@ async def test_discovery_coordinator_updates_identity(hass) -> None:
     assert result.entities == []
     update_entry.assert_called_once()
     assert discovery.last_refresh is not None
+
+
+async def test_discovery_coordinator_warns_on_identity_change(hass, monkeypatch) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    auth = SignalKAuthManager(None)
+    discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
+    logger = Mock()
+    monkeypatch.setattr("custom_components.signalk_ha.coordinator._LOGGER", logger)
+
+    with (
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_vessel_self",
+            new=AsyncMock(return_value={"name": "ONA"}),
+        ),
+        patch(
+            "custom_components.signalk_ha.coordinator.resolve_vessel_identity",
+            return_value=VesselIdentity(vessel_id="mmsi:123", vessel_name="ONA"),
+        ),
+        patch(
+            "custom_components.signalk_ha.coordinator.discover_entities",
+            return_value=DiscoveryResult(entities=[], conflicts=[]),
+        ),
+    ):
+        await discovery._async_update_data()
+
+    logger.warning.assert_called_once()
+    assert discovery.conflicts == []
 
 
 async def test_discovery_coordinator_auth_required(hass) -> None:

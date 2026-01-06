@@ -142,6 +142,20 @@ def test_health_sensor_unit() -> None:
     assert sensor.native_unit_of_measurement == "1/h"
 
 
+def test_health_sensor_suggested_precision() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    spec = HealthSpec(
+        "messages_per_hour",
+        "Messages per Hour",
+        lambda coord: coord.messages_per_hour,
+        unit="1/h",
+        suggested_display_precision=2,
+    )
+    sensor = SignalKHealthSensor(coordinator, entry, spec)
+    assert sensor.suggested_display_precision == 2
+
+
 def test_discovery_listener_adds_entities() -> None:
     entry = _make_entry()
     spec = DiscoveredEntity(

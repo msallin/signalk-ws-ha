@@ -4,6 +4,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .schema import SCHEMA_VERSION
+
 
 def _redact_url(url: str) -> str:
     if not url:
@@ -49,6 +51,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             "ws_url": _redact_url(cfg.ws_url),
             "vessel_id": cfg.vessel_id,
             "vessel_name": cfg.vessel_name,
+            "schema_version": SCHEMA_VERSION,
         },
         "auth": {
             "state": auth.state.value if auth else None,
