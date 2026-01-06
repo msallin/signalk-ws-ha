@@ -1,0 +1,13 @@
+{
+  "endpoints": {
+    "v1": {
+      "version": "2.19.0",
+      "signalk-http": "https://openplotter.local/signalk/v1/api/",
+      "signalk-ws": "wss://openplotter.local/signalk/v1/stream"
+    }
+  },
+  "server": {
+    "id": "signalk-server-node",
+    "version": "2.19.0"
+  }
+}

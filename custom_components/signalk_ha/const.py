@@ -13,6 +13,8 @@ CONF_REFRESH_INTERVAL_HOURS = "refresh_interval_hours"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_ENABLE_NOTIFICATIONS = "enable_notifications"
 CONF_GROUPS = "groups"
+CONF_SERVER_ID = "server_id"
+CONF_SERVER_VERSION = "server_version"
 
 DEFAULT_PORT = 3000
 DEFAULT_SSL = False

@@ -29,6 +29,8 @@ from .const import (
     CONF_INSTANCE_ID,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
+    CONF_SERVER_ID,
+    CONF_SERVER_VERSION,
     CONF_SSL,
     CONF_VERIFY_SSL,
     CONF_VESSEL_ID,
@@ -44,9 +46,12 @@ from .const import (
 )
 from .identity import build_instance_id, resolve_vessel_identity
 from .rest import (
+    DiscoveryInfo,
+    async_fetch_discovery,
     async_fetch_vessel_self,
     normalize_base_url,
     normalize_host_input,
+    normalize_server_url,
     normalize_ws_url,
 )
 from .schema import SCHEMA_GROUPS
@@ -71,58 +76,80 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if scheme_override in ("http", "https"):
                 use_ssl = scheme_override == "https"
 
-            base_url = normalize_base_url(host, port, use_ssl)
-            ws_url = normalize_ws_url(host, port, use_ssl)
+            server_url = normalize_server_url(host, port, use_ssl)
 
             try:
-                vessel_data = await self._async_validate_connection(
-                    base_url, user_input[CONF_VERIFY_SSL]
+                discovery = await self._async_discover_server(
+                    server_url, user_input[CONF_VERIFY_SSL]
                 )
-            except AuthRequired:
-                try:
-                    access_request = await self._async_start_access_request(
-                        base_url,
-                        user_input[CONF_VERIFY_SSL],
-                        host=host,
-                        port=port,
-                    )
-                except AccessRequestUnsupported:
-                    errors["base"] = "auth_not_supported"
-                except AuthRequired:
-                    errors["base"] = "auth_required"
-                except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError):
-                    errors["base"] = "cannot_connect"
-                else:
-                    groups = _normalize_groups(user_input.get(CONF_GROUPS))
-                    self._pending_data = {
-                        CONF_HOST: host,
-                        CONF_PORT: port,
-                        CONF_SSL: use_ssl,
-                        CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
-                        CONF_BASE_URL: base_url,
-                        CONF_WS_URL: ws_url,
-                        CONF_GROUPS: groups,
-                    }
-                    self._access_request = access_request
-                    self._auth_task = None
-                    return await self.async_step_auth()
             except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError, ssl.SSLError):
                 errors["base"] = "cannot_connect"
+            except AuthRequired:
+                errors["base"] = "cannot_connect"
             except ValueError:
-                errors["base"] = "invalid_response"
+                errors["base"] = "discovery_failed"
             else:
-                groups = _normalize_groups(user_input.get(CONF_GROUPS))
-                return await self._async_finish_setup(
-                    host=host,
-                    port=port,
-                    use_ssl=use_ssl,
-                    verify_ssl=user_input[CONF_VERIFY_SSL],
-                    base_url=base_url,
-                    ws_url=ws_url,
-                    vessel_data=vessel_data,
-                    access_token=None,
-                    groups=groups,
-                )
+                base_url = discovery.base_url
+                ws_url = discovery.ws_url
+                try:
+                    vessel_data = await self._async_validate_connection(
+                        base_url, user_input[CONF_VERIFY_SSL]
+                    )
+                except AuthRequired:
+                    try:
+                        access_request = await self._async_start_access_request(
+                            base_url,
+                            user_input[CONF_VERIFY_SSL],
+                            host=host,
+                            port=port,
+                        )
+                    except AccessRequestUnsupported:
+                        errors["base"] = "auth_not_supported"
+                    except AuthRequired:
+                        errors["base"] = "auth_required"
+                    except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError):
+                        errors["base"] = "cannot_connect"
+                    else:
+                        groups = _normalize_groups(user_input.get(CONF_GROUPS))
+                        self._pending_data = {
+                            CONF_HOST: host,
+                            CONF_PORT: port,
+                            CONF_SSL: use_ssl,
+                            CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
+                            CONF_BASE_URL: base_url,
+                            CONF_WS_URL: ws_url,
+                            CONF_SERVER_ID: discovery.server_id,
+                            CONF_SERVER_VERSION: discovery.server_version,
+                            CONF_GROUPS: groups,
+                        }
+                        self._access_request = access_request
+                        self._auth_task = None
+                        return await self.async_step_auth()
+                except (
+                    asyncio.TimeoutError,
+                    ClientConnectorError,
+                    ClientError,
+                    OSError,
+                    ssl.SSLError,
+                ):
+                    errors["base"] = "cannot_connect"
+                except ValueError:
+                    errors["base"] = "invalid_response"
+                else:
+                    groups = _normalize_groups(user_input.get(CONF_GROUPS))
+                    return await self._async_finish_setup(
+                        host=host,
+                        port=port,
+                        use_ssl=use_ssl,
+                        verify_ssl=user_input[CONF_VERIFY_SSL],
+                        base_url=base_url,
+                        ws_url=ws_url,
+                        vessel_data=vessel_data,
+                        access_token=None,
+                        groups=groups,
+                        server_id=discovery.server_id,
+                        server_version=discovery.server_version,
+                    )
 
         group_options = _group_options()
         schema = vol.Schema(
@@ -137,6 +164,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    async def _async_discover_server(
+        self, server_url: str, verify_ssl: bool
+    ) -> DiscoveryInfo:
+        session = async_get_clientsession(self.hass)
+        return await async_fetch_discovery(session, server_url, verify_ssl)
 
     async def _async_validate_connection(self, base_url: str, verify_ssl: bool) -> dict[str, Any]:
         session = async_get_clientsession(self.hass)
@@ -201,6 +234,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vessel_data=vessel_data,
                 access_token=token,
                 groups=_normalize_groups(self._pending_data.get(CONF_GROUPS)),
+                server_id=self._pending_data.get(CONF_SERVER_ID),
+                server_version=self._pending_data.get(CONF_SERVER_VERSION),
             )
 
         self._auth_task = None
@@ -243,6 +278,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_BASE_URL: base_url,
             CONF_WS_URL: ws_url,
             CONF_GROUPS: data.get(CONF_GROUPS),
+            CONF_SERVER_ID: data.get(CONF_SERVER_ID),
+            CONF_SERVER_VERSION: data.get(CONF_SERVER_VERSION),
         }
         self._access_request = access_request
         self._auth_task = None
@@ -272,6 +309,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         vessel_data: dict[str, Any],
         access_token: str | None,
         groups: list[str],
+        server_id: str | None,
+        server_version: str | None,
     ) -> FlowResult:
         identity = resolve_vessel_identity(vessel_data, base_url)
         instance_id = build_instance_id(base_url, identity.vessel_id)
@@ -290,6 +329,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_VESSEL_ID: identity.vessel_id,
             CONF_VESSEL_NAME: identity.vessel_name,
             CONF_INSTANCE_ID: instance_id,
+            CONF_SERVER_ID: server_id or "",
+            CONF_SERVER_VERSION: server_version or "",
             CONF_REFRESH_INTERVAL_HOURS: DEFAULT_REFRESH_INTERVAL_HOURS,
             CONF_GROUPS: groups,
         }

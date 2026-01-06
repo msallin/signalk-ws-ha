@@ -4,6 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .const import CONF_SERVER_ID, CONF_SERVER_VERSION
 from .schema import SCHEMA_VERSION
 
 
@@ -52,6 +53,8 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             "vessel_id": cfg.vessel_id,
             "vessel_name": cfg.vessel_name,
             "schema_version": SCHEMA_VERSION,
+            "server_id": entry.data.get(CONF_SERVER_ID),
+            "server_version": entry.data.get(CONF_SERVER_VERSION),
         },
         "auth": {
             "state": auth.state.value if auth else None,

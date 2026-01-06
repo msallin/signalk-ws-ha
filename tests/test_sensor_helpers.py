@@ -11,6 +11,8 @@ from custom_components.signalk_ha.const import (
     CONF_BASE_URL,
     CONF_HOST,
     CONF_PORT,
+    CONF_SERVER_ID,
+    CONF_SERVER_VERSION,
     CONF_SSL,
     CONF_VERIFY_SSL,
     CONF_VESSEL_ID,
@@ -49,6 +51,8 @@ def _make_entry() -> MockConfigEntry:
             CONF_WS_URL: "ws://sk.local:3000/signalk/v1/stream?subscribe=none",
             CONF_VESSEL_ID: "mmsi:261006533",
             CONF_VESSEL_NAME: "ONA",
+            CONF_SERVER_ID: "signalk-server-node",
+            CONF_SERVER_VERSION: "2.19.0",
         },
     )
 
@@ -455,6 +459,8 @@ def test_device_info_uses_base_url() -> None:
     info = _device_info(entry)
     assert info["name"] == "ONA"
     assert info["configuration_url"] == entry.data[CONF_BASE_URL]
+    assert info["model"] == entry.data[CONF_SERVER_ID]
+    assert info["sw_version"] == entry.data[CONF_SERVER_VERSION]
 
 
 def test_last_notification_attributes_none() -> None:

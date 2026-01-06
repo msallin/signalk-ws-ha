@@ -19,6 +19,8 @@ from custom_components.signalk_ha.const import (
     CONF_HOST,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
+    CONF_SERVER_ID,
+    CONF_SERVER_VERSION,
     CONF_SSL,
     CONF_VERIFY_SSL,
     CONF_VESSEL_ID,
@@ -26,6 +28,22 @@ from custom_components.signalk_ha.const import (
     DEFAULT_GROUPS,
     DOMAIN,
 )
+from custom_components.signalk_ha.rest import DiscoveryInfo, normalize_base_url, normalize_ws_url
+
+
+def _discovery_info(
+    *,
+    host: str = "sk.local",
+    port: int = 3000,
+    use_ssl: bool = False,
+    server_version: str | None = "2.19.0",
+) -> DiscoveryInfo:
+    return DiscoveryInfo(
+        base_url=normalize_base_url(host, port, use_ssl),
+        ws_url=normalize_ws_url(host, port, use_ssl),
+        server_id="signalk-server-node",
+        server_version=server_version,
+    )
 
 
 async def test_config_flow_creates_entry(hass, enable_custom_integrations) -> None:
@@ -34,6 +52,10 @@ async def test_config_flow_creates_entry(hass, enable_custom_integrations) -> No
 
     vessel_data = {"name": "ONA", "mmsi": "261006533"}
     with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
         patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(return_value=vessel_data),
@@ -57,6 +79,8 @@ async def test_config_flow_creates_entry(hass, enable_custom_integrations) -> No
     assert result["data"][CONF_VESSEL_NAME] == "ONA"
     assert result["data"][CONF_VESSEL_ID] == "mmsi:261006533"
     assert result["data"][CONF_GROUPS] == list(DEFAULT_GROUPS)
+    assert result["data"][CONF_SERVER_ID] == "signalk-server-node"
+    assert result["data"][CONF_SERVER_VERSION] == "2.19.0"
 
 
 async def test_config_flow_scheme_override(hass, enable_custom_integrations) -> None:
@@ -65,6 +89,10 @@ async def test_config_flow_scheme_override(hass, enable_custom_integrations) -> 
 
     vessel_data = {"name": "ONA", "mmsi": "261006533"}
     with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info(host="sk.local", port=1234, use_ssl=True)),
+        ),
         patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(return_value=vessel_data),
@@ -93,6 +121,10 @@ async def test_config_flow_scheme_override(hass, enable_custom_integrations) -> 
 async def test_config_flow_unique_id_prevents_duplicates(hass, enable_custom_integrations) -> None:
     vessel_data = {"name": "ONA", "mmsi": "261006533"}
     with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
         patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(return_value=vessel_data),
@@ -142,6 +174,10 @@ async def test_config_flow_access_request_requires_auth(hass, enable_custom_inte
 
     with (
         patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
+        patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=[AuthRequired(), vessel_data]),
         ),
@@ -188,6 +224,10 @@ async def test_config_flow_auth_timeout(hass, enable_custom_integrations) -> Non
 
     with (
         patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
+        patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=AuthRequired()),
         ),
@@ -227,6 +267,10 @@ async def test_config_flow_auth_not_supported(hass, enable_custom_integrations) 
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     with (
         patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
+        patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=AuthRequired()),
         ),
@@ -256,6 +300,10 @@ async def test_config_flow_auth_not_supported(hass, enable_custom_integrations) 
 async def test_config_flow_auth_required(hass, enable_custom_integrations) -> None:
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
         patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=AuthRequired()),
@@ -287,6 +335,10 @@ async def test_config_flow_access_request_cannot_connect(hass, enable_custom_int
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     with (
         patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
+        patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=AuthRequired()),
         ),
@@ -317,6 +369,10 @@ async def test_config_flow_invalid_response(hass, enable_custom_integrations) ->
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     with (
         patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
+        patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=ValueError()),
         ),
@@ -339,9 +395,65 @@ async def test_config_flow_invalid_response(hass, enable_custom_integrations) ->
     assert result["errors"]["base"] == "invalid_response"
 
 
+async def test_config_flow_discovery_failed(hass, enable_custom_integrations) -> None:
+    flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(side_effect=ValueError()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_get_clientsession",
+            return_value=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            flow["flow_id"],
+            {
+                CONF_HOST: "sk.local",
+                CONF_PORT: 3000,
+                CONF_SSL: False,
+                CONF_VERIFY_SSL: True,
+            },
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == "discovery_failed"
+
+
+async def test_config_flow_discovery_timeout(hass, enable_custom_integrations) -> None:
+    flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(side_effect=asyncio.TimeoutError()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_get_clientsession",
+            return_value=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            flow["flow_id"],
+            {
+                CONF_HOST: "sk.local",
+                CONF_PORT: 3000,
+                CONF_SSL: False,
+                CONF_VERIFY_SSL: True,
+            },
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == "cannot_connect"
+
+
 async def test_config_flow_cannot_connect(hass, enable_custom_integrations) -> None:
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
         patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=ssl.SSLError()),
@@ -374,6 +486,10 @@ async def test_config_flow_auth_failed(hass, enable_custom_integrations) -> None
     )
 
     with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
         patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=[AuthRequired(), AuthRequired()]),
@@ -483,6 +599,10 @@ async def test_config_flow_auth_step_not_supported(hass, enable_custom_integrati
 
     with (
         patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
+        patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=AuthRequired()),
         ),
@@ -528,6 +648,10 @@ async def test_config_flow_auth_rejected(hass, enable_custom_integrations) -> No
 
     with (
         patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
+        patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=AuthRequired()),
         ),
@@ -572,6 +696,10 @@ async def test_config_flow_auth_invalid_response(hass, enable_custom_integration
     )
 
     with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
         patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=[AuthRequired(), ValueError()]),
@@ -619,6 +747,10 @@ async def test_config_flow_auth_cannot_connect(hass, enable_custom_integrations)
     )
 
     with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
         patch(
             "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
             new=AsyncMock(side_effect=[AuthRequired(), ClientError()]),

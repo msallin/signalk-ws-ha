@@ -14,6 +14,8 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_BASE_URL,
+    CONF_SERVER_ID,
+    CONF_SERVER_VERSION,
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     DEFAULT_MIN_UPDATE_SECONDS,
@@ -76,10 +78,14 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
     vessel_name = entry.data.get(CONF_VESSEL_NAME, "Unknown Vessel")
     base_url = entry.data.get(CONF_BASE_URL)
     vessel_id = entry.data.get(CONF_VESSEL_ID)
+    server_id = entry.data.get(CONF_SERVER_ID) or None
+    server_version = entry.data.get(CONF_SERVER_VERSION) or None
     return DeviceInfo(
         identifiers={(DOMAIN, entry.entry_id)},
         name=vessel_name,
         manufacturer="Signal K",
+        model=server_id,
+        sw_version=server_version,
         configuration_url=base_url or f"{scheme}://{host}:{port}",
         serial_number=vessel_id,
     )

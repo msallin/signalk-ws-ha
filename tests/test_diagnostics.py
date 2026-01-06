@@ -4,7 +4,11 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.signalk_ha.auth import SignalKAuthManager
-from custom_components.signalk_ha.const import DOMAIN
+from custom_components.signalk_ha.const import (
+    CONF_SERVER_ID,
+    CONF_SERVER_VERSION,
+    DOMAIN,
+)
 from custom_components.signalk_ha.diagnostics import (
     _redact_url,
     async_get_config_entry_diagnostics,
@@ -13,7 +17,10 @@ from custom_components.signalk_ha.runtime import SignalKRuntimeData
 
 
 async def test_diagnostics_redacts_urls(hass) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SERVER_ID: "signalk-server-node", CONF_SERVER_VERSION: "2.19.0"},
+    )
     entry.add_to_hass(hass)
 
     cfg = SimpleNamespace(
@@ -51,10 +58,15 @@ async def test_diagnostics_redacts_urls(hass) -> None:
     assert diagnostics["last_update_by_path"] == {}
     assert diagnostics["notifications"]["count"] == 0
     assert diagnostics["notifications"]["last"] is None
+    assert diagnostics["config"]["server_id"] == "signalk-server-node"
+    assert diagnostics["config"]["server_version"] == "2.19.0"
 
 
 async def test_diagnostics_no_runtime_data(hass) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SERVER_ID: "signalk-server-node", CONF_SERVER_VERSION: "2.19.0"},
+    )
     entry.add_to_hass(hass)
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
@@ -66,7 +78,10 @@ def test_redact_url_empty() -> None:
 
 
 async def test_diagnostics_handles_none_timestamps(hass) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SERVER_ID: "signalk-server-node", CONF_SERVER_VERSION: "2.19.0"},
+    )
     entry.add_to_hass(hass)
 
     cfg = SimpleNamespace(
@@ -100,7 +115,10 @@ async def test_diagnostics_handles_none_timestamps(hass) -> None:
 
 
 async def test_diagnostics_last_notification(hass) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SERVER_ID: "signalk-server-node", CONF_SERVER_VERSION: "2.19.0"},
+    )
     entry.add_to_hass(hass)
 
     cfg = SimpleNamespace(
