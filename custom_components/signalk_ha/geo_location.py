@@ -101,6 +101,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         self._discovery = discovery
         self._attr_device_info = _device_info(entry)
         self._description = _position_description(discovery)
+        self._spec_known = _position_spec_known(discovery)
 
         self._attr_name = "Position"
         self._attr_unique_id = f"signalk:{entry.entry_id}:{SK_PATH_POSITION}"
@@ -145,6 +146,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
     def state_attributes(self) -> dict[str, Any]:
         data = super().state_attributes
         data["path"] = SK_PATH_POSITION
+        data["spec_known"] = self._spec_known
         if self._description:
             data["description"] = self._description
         source = self.coordinator.last_source_by_path.get(SK_PATH_POSITION)
@@ -222,6 +224,15 @@ def _position_description(discovery: SignalKDiscoveryCoordinator) -> str | None:
         if spec.path == SK_PATH_POSITION and spec.kind == "geo_location":
             return spec.description
     return None
+
+
+def _position_spec_known(discovery: SignalKDiscoveryCoordinator) -> bool:
+    if not discovery.data:
+        return False
+    for spec in discovery.data.entities:
+        if spec.path == SK_PATH_POSITION and spec.kind == "geo_location":
+            return spec.spec_known
+    return False
 
 
 class _SignalKDiscoveryListener:

@@ -68,6 +68,8 @@ def test_discovery_skips_non_dict_children() -> None:
     paths = {entity.path for entity in result.entities}
     assert "navigation.foo" not in paths
     assert "navigation.speedOverGround" in paths
+    speed = next(spec for spec in result.entities if spec.path == "navigation.speedOverGround")
+    assert speed.spec_known is True
 
 
 def test_discovery_skips_non_dict_scope() -> None:
@@ -143,6 +145,7 @@ def test_discovery_meta_display_name_and_units() -> None:
     assert entity.name == "Outside Temp"
     assert entity.unit == "degC"
     assert entity.conversion is not None
+    assert entity.spec_known is True
 
 
 def test_discovery_schema_units_used_when_meta_missing() -> None:
@@ -159,6 +162,7 @@ def test_discovery_schema_units_used_when_meta_missing() -> None:
     entity = next(spec for spec in result.entities if spec.path.endswith("temperature"))
     assert entity.unit == "degC"
     assert entity.conversion is not None
+    assert entity.spec_known is True
 
 
 def test_discovery_schema_description_overrides_meta() -> None:

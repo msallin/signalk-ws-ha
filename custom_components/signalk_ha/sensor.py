@@ -285,7 +285,11 @@ class SignalKSensor(SignalKBaseSensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         last_seen = _last_seen(self._spec.path, self.coordinator)
-        attrs: dict[str, Any] = {"path": self._spec.path, "last_seen": last_seen}
+        attrs: dict[str, Any] = {
+            "path": self._spec.path,
+            "last_seen": last_seen,
+            "spec_known": self._spec.spec_known,
+        }
         if self._spec.description:
             attrs["description"] = self._spec.description
         source = self.coordinator.last_source_by_path.get(self._spec.path)

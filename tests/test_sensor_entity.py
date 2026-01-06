@@ -66,6 +66,7 @@ async def test_coordinator_updates_sensor_state(hass, enable_custom_integrations
         tolerance=None,
         min_update_seconds=None,
         description="Speed over ground",
+        spec_known=True,
     )
     discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
@@ -81,6 +82,7 @@ async def test_coordinator_updates_sensor_state(hass, enable_custom_integrations
     attrs = sensor.extra_state_attributes
     assert attrs["description"] == "Speed over ground"
     assert attrs["source"] == "src1"
+    assert attrs["spec_known"] is True
 
 
 async def test_sensor_unavailable_when_disconnected(hass) -> None:
@@ -181,6 +183,7 @@ async def test_sensor_extra_attributes_minimal(hass) -> None:
     attrs = sensor.extra_state_attributes
     assert attrs["path"] == "navigation.speedOverGround"
     assert "description" not in attrs
+    assert attrs["spec_known"] is False
 
 
 async def test_sensor_handle_update_writes_state(hass) -> None:

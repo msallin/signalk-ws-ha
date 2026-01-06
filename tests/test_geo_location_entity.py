@@ -27,6 +27,7 @@ from custom_components.signalk_ha.geo_location import (
     _coord_distance,
     _path_available,
     _position_description,
+    _position_spec_known,
     _registry_has_geolocation,
     _should_create_geolocation,
     _SignalKDiscoveryListener,
@@ -65,6 +66,7 @@ async def test_geo_location_updates(hass, enable_custom_integrations) -> None:
         tolerance=0.00001,
         min_update_seconds=None,
         description="Vessel position",
+        spec_known=True,
     )
     discovery = SimpleNamespace(
         data=DiscoveryResult(entities=[spec], conflicts=[]),
@@ -85,6 +87,7 @@ async def test_geo_location_updates(hass, enable_custom_integrations) -> None:
     attrs = geo.state_attributes
     assert attrs["description"] == "Vessel position"
     assert attrs["source"] == "src1"
+    assert attrs["spec_known"] is True
 
 
 async def test_geo_location_unavailable_when_stale(hass, enable_custom_integrations) -> None:
@@ -232,6 +235,28 @@ def test_position_description_none() -> None:
     assert _position_description(discovery) is None
 
 
+def test_position_spec_known_false() -> None:
+    discovery = SimpleNamespace(data=None)
+    assert _position_spec_known(discovery) is False
+
+
+def test_position_spec_known_true() -> None:
+    spec = DiscoveredEntity(
+        path="navigation.position",
+        name="Position",
+        kind="geo_location",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+        spec_known=True,
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    assert _position_spec_known(discovery) is True
+
+
 def test_path_available_defaults_true() -> None:
     discovery = SimpleNamespace(data=None)
     assert _path_available(discovery) is True
@@ -368,6 +393,7 @@ async def test_geo_location_state_attributes_include_description(hass) -> None:
         tolerance=None,
         min_update_seconds=None,
         description="GPS position",
+        spec_known=True,
     )
     discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
@@ -376,6 +402,7 @@ async def test_geo_location_state_attributes_include_description(hass) -> None:
     coordinator._state = ConnectionState.CONNECTED
     geo = SignalKPositionGeolocation(coordinator, discovery, entry)
     assert geo.state_attributes["description"] == "GPS position"
+    assert geo.state_attributes["spec_known"] is True
 
 
 async def test_geo_location_state_attributes_include_last_seen(hass) -> None:
@@ -502,6 +529,7 @@ def test_geo_location_state_attributes_omit_last_seen(hass) -> None:
     coordinator._state = ConnectionState.CONNECTED
     geo = SignalKPositionGeolocation(coordinator, discovery, entry)
     assert "last_seen" not in geo.state_attributes
+    assert geo.state_attributes["spec_known"] is False
 
 
 def test_geo_location_handle_update_skips_when_unchanged(hass) -> None:

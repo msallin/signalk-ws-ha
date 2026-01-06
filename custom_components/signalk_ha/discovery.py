@@ -46,6 +46,7 @@ class DiscoveredEntity:
     icon: str | None = None
     period_ms: int = DEFAULT_PERIOD_MS
     description: str | None = None
+    spec_known: bool = False
 
 
 @dataclass(frozen=True)
@@ -110,6 +111,7 @@ def _add_entity(
     schema_info = lookup_schema(path)
     schema_units = schema_info.units if schema_info else None
     schema_description = schema_info.description if schema_info else None
+    spec_known = schema_info is not None
 
     if path == SK_PATH_POSITION:
         description = schema_description
@@ -130,6 +132,7 @@ def _add_entity(
                 meta_units=meta_units,
                 period_ms=DEFAULT_PERIOD_MS,
                 description=description,
+                spec_known=spec_known,
             )
         )
         return
@@ -184,6 +187,7 @@ def _add_entity(
             meta_units=meta_units,
             period_ms=period_ms,
             description=description,
+            spec_known=spec_known,
         )
     )
 
