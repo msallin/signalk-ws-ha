@@ -310,7 +310,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elapsed = (dt_util.utcnow() - self._first_message_at).total_seconds()
         if elapsed <= 0:
             return None
-        return self._stats.messages / (elapsed / 3600.0)
+        return round(self._stats.messages / (elapsed / 3600.0), 2)
 
     @property
     def notifications_per_hour(self) -> float | None:
@@ -319,7 +319,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elapsed = (dt_util.utcnow() - self._first_notification_at).total_seconds()
         if elapsed <= 0:
             return None
-        return self._notification_count / (elapsed / 3600.0)
+        return round(self._notification_count / (elapsed / 3600.0), 2)
 
     async def async_start(self) -> None:
         if self._task is not None:

@@ -125,6 +125,24 @@ def test_rate_properties_ignore_non_positive_elapsed() -> None:
     assert coordinator.notifications_per_hour is None
 
 
+def test_rate_properties_are_rounded() -> None:
+    coordinator = SignalKCoordinator(
+        Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
+    )
+    coordinator._stats.messages = 1
+    coordinator._first_message_at = dt_util.utcnow() - timedelta(seconds=3599)
+    coordinator._notification_count = 1
+    coordinator._first_notification_at = dt_util.utcnow() - timedelta(seconds=3599)
+
+    messages_per_hour = coordinator.messages_per_hour
+    notifications_per_hour = coordinator.notifications_per_hour
+
+    assert messages_per_hour is not None
+    assert notifications_per_hour is not None
+    assert messages_per_hour == round(messages_per_hour, 2)
+    assert notifications_per_hour == round(notifications_per_hour, 2)
+
+
 async def test_run_inactivity_timeout_records_error(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
