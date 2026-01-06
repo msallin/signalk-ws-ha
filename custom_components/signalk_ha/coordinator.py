@@ -598,6 +598,11 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             state = value.get("state")
             message = value.get("message")
             method = value.get("method")
+        if not isinstance(message, str) or not message.strip():
+            if isinstance(state, str) and state.strip():
+                message = f"{path} ({state})"
+            else:
+                message = path
 
         signature = self._notification_signature(value, state, message, method, source)
         now = time.monotonic()

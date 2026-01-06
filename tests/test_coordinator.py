@@ -366,7 +366,8 @@ def test_fire_notification_dedupes_without_timestamp(hass) -> None:
         "value": value,
         "source": "anchoralarm",
     }
-    signature = coordinator._notification_signature(value, "alert", None, None, "anchoralarm")
+    message = "notifications.navigation.anchor (alert)"
+    signature = coordinator._notification_signature(value, "alert", message, None, "anchoralarm")
     coordinator._notification_cache[notification["path"]] = (signature, None, time.monotonic())
     coordinator._fire_notification(notification, coordinator.config)
 
@@ -391,6 +392,24 @@ def test_fire_notification_dedupes_with_timestamp(hass) -> None:
     coordinator._fire_notification(notification, coordinator.config)
 
     assert len(events) == 1
+
+
+def test_fire_notification_defaults_message(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    events: list = []
+    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+
+    notification = {
+        "path": "notifications.navigation.anchor",
+        "value": {"state": "alert"},
+    }
+
+    coordinator._fire_notification(notification, coordinator.config)
+
+    assert events
+    assert events[0].data["message"] == "notifications.navigation.anchor (alert)"
 
 
 def test_notification_signature_handles_bad_keys() -> None:
