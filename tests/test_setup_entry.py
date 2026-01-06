@@ -447,3 +447,37 @@ async def test_update_subscriptions_disable_notifications(hass) -> None:
     paths, periods = coordinator.async_update_paths.call_args.args
     assert paths == ["navigation.speedOverGround"]
     assert SK_PATH_NOTIFICATIONS not in periods
+
+
+async def test_update_subscriptions_skips_event_entities(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"signalk:{entry.entry_id}:navigation.speedOverGround",
+        suggested_object_id="speed_over_ground",
+        config_entry=entry,
+    ).entity_id
+    registry.async_get_or_create(
+        "event",
+        DOMAIN,
+        f"signalk:{entry.entry_id}:notifications.navigation.anchor",
+        suggested_object_id="navigation_anchor_notification",
+        config_entry=entry,
+    )
+
+    coordinator = AsyncMock()
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=SimpleNamespace(data=None),
+        auth=AsyncMock(),
+    )
+
+    await _async_update_subscriptions(hass, entry)
+
+    paths, _ = coordinator.async_update_paths.call_args.args
+    assert "notifications.navigation.anchor" not in paths
+    assert SK_PATH_NOTIFICATIONS in paths

@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, WSMsgType, WSServerHandshakeError
 from homeassistant.config_entries import ConfigEntry
@@ -202,6 +202,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._paths: list[str] = []
         self._periods: dict[str, int] = {}
         self._notification_cache: dict[str, tuple[tuple[Any, ...], str | None, float]] = {}
+        self._notification_listeners: list[Callable[[dict[str, Any]], None]] = []
         self._notification_count = 0
         self._last_notification: dict[str, Any] | None = None
         self._first_message_at = None
@@ -326,6 +327,21 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if elapsed <= 0:
             return None
         return round(self._notification_count / (elapsed / 3600.0), 2)
+
+    @property
+    def notifications_enabled(self) -> bool:
+        return self._notifications_enabled()
+
+    def async_add_notification_listener(
+        self, listener: Callable[[dict[str, Any]], None]
+    ) -> Callable[[], None]:
+        self._notification_listeners.append(listener)
+
+        def _remove() -> None:
+            if listener in self._notification_listeners:
+                self._notification_listeners.remove(listener)
+
+        return _remove
 
     async def async_start(self) -> None:
         if self._task is not None:
@@ -638,6 +654,11 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._notification_count += 1
         self._last_notification = event_data
         _LOGGER.debug("Signal K notification: %s", event_data)
+        for listener in list(self._notification_listeners):
+            try:
+                listener(dict(event_data))
+            except Exception:  # pragma: no cover - defensive
+                _LOGGER.exception("Signal K notification listener failed")
         self.hass.bus.async_fire(EVENT_SIGNAL_K_NOTIFICATION, event_data)
 
     @staticmethod

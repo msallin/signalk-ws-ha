@@ -64,6 +64,8 @@ Signal K notifications (`notifications.*`) are forwarded as Home Assistant event
 - Event: `signalk_ha_notification`
 - Payload includes: `path`, `value`, `state`, `message`, `method`, `timestamp`, `source`, `vessel_id`, `vessel_name`, `entry_id`
 
+Notifications are also exposed as Event entities (domain `event`) so you can build automations in the UI. Each unique notification path creates an Event entity (for example, `notifications.navigation.anchor` becomes an event entity named "Navigation Anchor Notification"). The `event_type` matches the Signal K alarm state (`nominal`, `normal`, `alert`, `warn`, `alarm`, `emergency`) and the attributes include the full Signal K payload fields listed above.
+
 Example automation (anchor alarm):
 
 Signal K publishes anchor alarms under `notifications.navigation.anchor` with states like `warn`, `alarm`, or `emergency`. The following automation creates a persistent notification in Home Assistant when such an alarm is received.

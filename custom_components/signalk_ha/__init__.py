@@ -37,7 +37,7 @@ from .identity import build_instance_id
 from .rest import normalize_base_url, normalize_ws_url
 from .runtime import SignalKRuntimeData
 
-PLATFORMS: list[str] = ["sensor", "geo_location"]
+PLATFORMS: list[str] = ["sensor", "geo_location", "event"]
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -149,6 +149,8 @@ async def _async_update_subscriptions(hass: HomeAssistant, entry: ConfigEntry) -
         }
     for registry_entry in entries:
         if registry_entry.disabled:
+            continue
+        if registry_entry.domain == "event":
             continue
         path = _path_from_unique_id(registry_entry.unique_id)
         if path:

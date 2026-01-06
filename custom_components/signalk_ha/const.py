@@ -44,3 +44,13 @@ HEALTH_SENSOR_LAST_NOTIFICATION = "last_notification"
 HEALTH_SENSOR_MESSAGE_COUNT = "message_count"
 HEALTH_SENSOR_MESSAGES_PER_HOUR = "messages_per_hour"
 HEALTH_SENSOR_NOTIFICATIONS_PER_HOUR = "notifications_per_hour"
+
+NOTIFICATION_EVENT_TYPES = (
+    "nominal",
+    "normal",
+    "alert",
+    "warn",
+    "alarm",
+    "emergency",
+    "unknown",
+)
