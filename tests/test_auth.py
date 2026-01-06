@@ -57,6 +57,10 @@ async def test_access_request_create_success() -> None:
         client_id="signalk:test",
     )
 
+    payload = session.post.call_args.kwargs["json"]
+    assert "permissions" not in payload
+    assert payload["clientId"] == "signalk:test"
+
     assert request.request_id == "req123"
     assert request.approval_url == "http://sk/approve"
 

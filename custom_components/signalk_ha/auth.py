@@ -125,18 +125,6 @@ async def async_create_access_request(
     payload = {
         "clientId": client_id,
         "description": description,
-        "permissions": [
-            {
-                "context": "vessels.self",
-                "resources": [
-                    {
-                        "path": "*",
-                        "read": True,
-                        "write": False,
-                    }
-                ],
-            }
-        ],
     }
 
     ssl_context = build_ssl_param(verify_ssl)
