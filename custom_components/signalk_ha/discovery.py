@@ -23,6 +23,46 @@ _RESERVED_KEYS = {
 
 _GENERIC_PREFIXES = frozenset(SCHEMA_GROUPS)
 
+_ICON_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("navigation.anchor", "mdi:anchor"),
+    ("navigation.course", "mdi:compass"),
+    ("navigation.heading", "mdi:compass"),
+    ("navigation.speed", "mdi:speedometer"),
+    ("environment.wind", "mdi:weather-windy"),
+    ("environment.depth", "mdi:waves"),
+    ("environment.tide", "mdi:waves"),
+    ("environment.water", "mdi:waves"),
+    ("electrical.batteries", "mdi:battery"),
+    ("electrical.solar", "mdi:solar-power"),
+    ("electrical.chargers", "mdi:battery-charging"),
+    ("electrical.inverters", "mdi:power-plug"),
+    ("electrical.alternators", "mdi:engine"),
+    ("electrical.ac", "mdi:sine-wave"),
+    ("tanks.fuel", "mdi:fuel"),
+    ("tanks.freshWater", "mdi:water"),
+    ("tanks.blackWater", "mdi:water-alert"),
+    ("tanks.wasteWater", "mdi:water-alert"),
+    ("tanks.lubrication", "mdi:oil"),
+    ("tanks.gas", "mdi:gas-cylinder"),
+    ("tanks.ballast", "mdi:anchor"),
+    ("tanks.liveWell", "mdi:fish"),
+    ("tanks.baitWell", "mdi:fish"),
+)
+
+_ICON_SUFFIXES: tuple[tuple[str, str], ...] = (
+    (".temperature", "mdi:thermometer"),
+    (".pressure", "mdi:gauge"),
+    (".voltage", "mdi:flash"),
+    (".current", "mdi:current-dc"),
+    (".realPower", "mdi:flash"),
+    (".apparentPower", "mdi:flash"),
+    (".reactivePower", "mdi:flash"),
+    (".frequency", "mdi:sine-wave"),
+    (".stateOfCharge", "mdi:battery"),
+    (".stateOfHealth", "mdi:battery-heart"),
+    (".timeRemaining", "mdi:timer-outline"),
+)
+
 
 @dataclass(frozen=True)
 class MetadataConflict:
@@ -168,6 +208,7 @@ def _add_entity(
     state_class = mapping.state_class if mapping else None
     tolerance = mapping.tolerance if mapping else _tolerance_from_meta(units_hint)
     min_update_seconds = mapping.min_update_seconds if mapping else None
+    icon = _icon_for_path(path, device_class)
 
     period_ms = (
         mapping.period_ms if mapping and mapping.period_ms is not None else DEFAULT_PERIOD_MS
@@ -185,6 +226,7 @@ def _add_entity(
             tolerance=tolerance,
             min_update_seconds=min_update_seconds,
             meta_units=meta_units,
+            icon=icon,
             period_ms=period_ms,
             description=description,
             spec_known=spec_known,
@@ -297,6 +339,18 @@ def _tolerance_from_meta(meta_units: Any) -> float | None:
         return 0.5
     if units == "ratio":
         return 0.01
+    return None
+
+
+def _icon_for_path(path: str, device_class: SensorDeviceClass | None) -> str | None:
+    if device_class is not None:
+        return None
+    for prefix, icon in _ICON_PREFIXES:
+        if path.startswith(prefix):
+            return icon
+    for suffix, icon in _ICON_SUFFIXES:
+        if path.endswith(suffix):
+            return icon
     return None
 
 

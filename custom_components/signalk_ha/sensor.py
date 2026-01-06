@@ -271,6 +271,8 @@ class SignalKSensor(SignalKBaseSensor):
             self._attr_state_class = spec.state_class
         if spec.unit:
             self._attr_native_unit_of_measurement = spec.unit
+        if spec.icon:
+            self._attr_icon = spec.icon
 
     @property
     def available(self) -> bool:

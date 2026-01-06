@@ -222,3 +222,18 @@ def test_convert_value_numeric_conversion() -> None:
 
 def test_convert_value_non_numeric_with_conversion() -> None:
     assert convert_value("abc", Conversion.MS_TO_KNOTS) == "abc"
+
+
+def test_discovery_icon_defaults() -> None:
+    data = {
+        "electrical": {"batteries": {"0": {"voltage": {"value": 12.4}}}},
+        "tanks": {"fuel": {"0": {"currentLevel": {"value": 0.5}}}},
+        "environment": {
+            "outside": {"temperature": {"value": 300.0, "meta": {"units": "K"}}}
+        },
+    }
+    result = discover_entities(data, scopes=("electrical", "tanks", "environment"))
+    icons = {entity.path: entity.icon for entity in result.entities}
+    assert icons["electrical.batteries.0.voltage"] == "mdi:battery"
+    assert icons["tanks.fuel.0.currentLevel"] == "mdi:fuel"
+    assert icons["environment.outside.temperature"] == "mdi:thermometer"
