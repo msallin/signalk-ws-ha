@@ -150,3 +150,47 @@ async def test_async_fetch_discovery_http_error() -> None:
     server_url = normalize_server_url("sk.local", 3000, False)
     with pytest.raises(RuntimeError):
         await async_fetch_discovery(session, server_url, True)
+
+
+async def test_async_fetch_discovery_auth_required() -> None:
+    session = SimpleNamespace()
+    session.get = Mock(return_value=_MockResponse(401, {}))
+
+    server_url = normalize_server_url("sk.local", 3000, False)
+    with pytest.raises(AuthRequired):
+        await async_fetch_discovery(session, server_url, True)
+
+
+async def test_async_fetch_discovery_non_object() -> None:
+    session = SimpleNamespace()
+    session.get = Mock(return_value=_MockResponse(200, ["bad"]))
+
+    server_url = normalize_server_url("sk.local", 3000, False)
+    with pytest.raises(ValueError):
+        await async_fetch_discovery(session, server_url, True)
+
+
+def test_parse_discovery_missing_endpoints() -> None:
+    with pytest.raises(ValueError):
+        parse_discovery({"endpoints": []})
+
+
+def test_parse_discovery_missing_http_or_ws() -> None:
+    with pytest.raises(ValueError):
+        parse_discovery({"endpoints": {"v1": {"signalk-ws": "ws://sk/ws"}}})
+    with pytest.raises(ValueError):
+        parse_discovery({"endpoints": {"v1": {"signalk-http": "http://sk/api"}}})
+
+
+def test_parse_discovery_normalizes_ws_and_base_url() -> None:
+    data = {
+        "endpoints": {
+            "v1": {
+                "signalk-http": "http://sk.local:3000/signalk/v1/api",
+                "signalk-ws": "wss://sk.local:3000/signalk/v1/stream?subscribe=all",
+            }
+        }
+    }
+    info = parse_discovery(data)
+    assert info.base_url.endswith("/signalk/v1/api/")
+    assert info.ws_url.endswith("subscribe=all")

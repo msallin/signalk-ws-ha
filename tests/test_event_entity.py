@@ -1,5 +1,7 @@
 from unittest.mock import Mock
 
+from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.signalk_ha.auth import SignalKAuthManager
@@ -16,7 +18,13 @@ from custom_components.signalk_ha.const import (
     DOMAIN,
 )
 from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoordinator
-from custom_components.signalk_ha.event import _notification_event_type, async_setup_entry
+from custom_components.signalk_ha.event import (
+    _humanize_segment,
+    _notification_attributes,
+    _notification_event_type,
+    _notification_name,
+    async_setup_entry,
+)
 from custom_components.signalk_ha.runtime import SignalKRuntimeData
 
 
@@ -40,6 +48,26 @@ def _make_entry(options=None) -> MockConfigEntry:
 def test_notification_event_type_normalizes() -> None:
     assert _notification_event_type("ALERT") == "alert"
     assert _notification_event_type(None) == "unknown"
+
+
+def test_notification_name_humanizes() -> None:
+    assert _humanize_segment("speedOverGround") == "Speed Over Ground"
+    assert _notification_name("notifications.navigation.anchor") == "Navigation Anchor Notification"
+    assert _notification_name("notifications") == "Notification"
+
+
+def test_notification_attributes_formats_received_at() -> None:
+    received_at = dt_util.utcnow()
+    attrs = _notification_attributes(
+        {
+            "path": "notifications.navigation.anchor",
+            "state": "alert",
+            "message": "Anchor Alarm",
+            "received_at": received_at,
+        }
+    )
+    assert attrs["path"] == "notifications.navigation.anchor"
+    assert attrs["received_at"] == dt_util.as_utc(received_at).isoformat()
 
 
 async def test_event_entity_updates_on_notification(hass) -> None:
@@ -77,3 +105,112 @@ async def test_event_entity_updates_on_notification(hass) -> None:
     assert attrs["source"] == "anchoralarm"
     assert attrs["timestamp"] == "2026-01-03T22:34:57.853Z"
     assert attrs["received_at"]
+
+
+async def test_event_listener_skips_disabled_entity(hass) -> None:
+    entry = _make_entry(options={CONF_NOTIFICATION_PATHS: ["notifications.*"]})
+    entry.add_to_hass(hass)
+
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._state = ConnectionState.CONNECTED
+
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=Mock(),
+        auth=SignalKAuthManager(None),
+    )
+
+    registry = er.async_get(hass)
+    unique_id = f"signalk:{entry.entry_id}:notifications.navigation.anchor"
+    registry.async_get_or_create(
+        "event",
+        DOMAIN,
+        unique_id,
+        suggested_object_id="anchor",
+        config_entry=entry,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+
+    added: list = []
+    await async_setup_entry(hass, entry, added.extend)
+
+    notification = {
+        "path": "notifications.navigation.anchor",
+        "value": {"state": "alert"},
+        "timestamp": dt_util.utcnow().isoformat(),
+    }
+
+    coordinator._fire_notification(notification, coordinator.config)
+    assert added == []
+
+
+async def test_event_listener_creates_entity_for_wildcard(hass) -> None:
+    entry = _make_entry(options={CONF_NOTIFICATION_PATHS: ["notifications.*"]})
+    entry.add_to_hass(hass)
+
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._state = ConnectionState.CONNECTED
+
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=Mock(),
+        auth=SignalKAuthManager(None),
+    )
+
+    added: list = []
+    await async_setup_entry(hass, entry, added.extend)
+
+    notification = {
+        "path": "notifications.navigation.anchor",
+        "value": {"state": "alert"},
+        "timestamp": "2026-01-03T22:34:57.853Z",
+    }
+
+    coordinator._fire_notification(notification, coordinator.config)
+    assert len(added) == 1
+
+
+async def test_event_listener_creates_after_reenable(hass) -> None:
+    entry = _make_entry(options={CONF_NOTIFICATION_PATHS: ["notifications.*"]})
+    entry.add_to_hass(hass)
+
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._state = ConnectionState.CONNECTED
+
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=Mock(),
+        auth=SignalKAuthManager(None),
+    )
+
+    registry = er.async_get(hass)
+    unique_id = f"signalk:{entry.entry_id}:notifications.navigation.anchor"
+    disabled_id = registry.async_get_or_create(
+        "event",
+        DOMAIN,
+        unique_id,
+        suggested_object_id="anchor",
+        config_entry=entry,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    ).entity_id
+
+    added: list = []
+    await async_setup_entry(hass, entry, added.extend)
+
+    coordinator._fire_notification(
+        {"path": "notifications.navigation.anchor", "value": {"state": "alert"}},
+        coordinator.config,
+    )
+    assert added == []
+
+    registry.async_update_entity(disabled_id, disabled_by=None)
+
+    coordinator._fire_notification(
+        {
+            "path": "notifications.navigation.anchor",
+            "value": {"state": "alert"},
+            "timestamp": "2026-01-03T22:34:57.853Z",
+        },
+        coordinator.config,
+    )
+    assert len(added) == 1

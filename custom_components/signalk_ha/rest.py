@@ -85,6 +85,7 @@ def parse_discovery(data: dict[str, Any]) -> DiscoveryInfo:
             fallback_version if isinstance(fallback_version, str) and fallback_version else None
         )
 
+    # Normalize endpoints to a stable form so comparisons and device info stay consistent.
     return DiscoveryInfo(
         base_url=_ensure_trailing_slash(http_base),
         ws_url=_ensure_subscribe_none(ws_stream),
@@ -104,6 +105,7 @@ def _ensure_trailing_slash(url: str) -> str:
 def _ensure_subscribe_none(url: str) -> str:
     parsed = urlsplit(url)
     query = parse_qs(parsed.query, keep_blank_values=True)
+    # Default to subscribe=none so we always control the subscription payloads.
     if not query.get("subscribe"):
         query["subscribe"] = ["none"]
     new_query = urlencode(query, doseq=True)

@@ -480,6 +480,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._stats.reconnects += 1
             self._set_state(ConnectionState.RECONNECTING)
 
+            # Backoff prevents tight reconnect loops on flaky networks.
             delay = min(backoff, _BACKOFF_MAX) + random.uniform(0, _BACKOFF_JITTER)
             self._last_backoff = delay
             await asyncio.sleep(delay)
@@ -499,6 +500,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.info("Sent subscribe for %s paths", len(self._paths))
 
     def _handle_message(self, text: str, cfg: SignalKConfig) -> None:
+        # Keep parsing and notification routing localized to avoid churn in the main loop.
         self._stats.messages += 1
         self._last_message = dt_util.utcnow()
         if self._first_message_at is None:
@@ -536,6 +538,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 source_changed = True
         if not changed:
             if source_changed:
+                # Source changes should still be reflected without forcing value churn.
                 self._schedule_flush()
             return
 
@@ -557,6 +560,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._flush_handle is not None:
             return
 
+        # Coalesce bursts of deltas so HA only processes state updates at a steady cadence.
         self._flush_handle = self.hass.loop.call_later(_COALESCE_SECONDS, self._flush_updates)
 
     def _flush_updates(self) -> None:

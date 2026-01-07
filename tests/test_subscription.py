@@ -166,3 +166,39 @@ def test_build_subscribe_payload_clamps_period_below_stale() -> None:
             "policy": "ideal",
         }
     ]
+
+
+def test_build_subscribe_payload_defaults_zero_period() -> None:
+    payload = build_subscribe_payload(
+        "vessels.self",
+        [
+            {"path": "navigation.speedOverGround", "period": 0},
+        ],
+    )
+    assert payload["subscribe"] == [
+        {
+            "path": "navigation.speedOverGround",
+            "period": DEFAULT_PERIOD_MS,
+            "minPeriod": min(DEFAULT_MIN_UPDATE_MS, DEFAULT_PERIOD_MS),
+            "format": "delta",
+            "policy": "ideal",
+        }
+    ]
+
+
+def test_build_subscribe_payload_defaults_zero_min_period() -> None:
+    payload = build_subscribe_payload(
+        "vessels.self",
+        [
+            {"path": "navigation.speedOverGround", "period": 2000, "minPeriod": 0},
+        ],
+    )
+    assert payload["subscribe"] == [
+        {
+            "path": "navigation.speedOverGround",
+            "period": 2000,
+            "minPeriod": min(DEFAULT_MIN_UPDATE_MS, 2000),
+            "format": "delta",
+            "policy": "ideal",
+        }
+    ]

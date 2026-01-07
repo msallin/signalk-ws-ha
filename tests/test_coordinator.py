@@ -12,6 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+import custom_components.signalk_ha.coordinator as coordinator_module
 from custom_components.signalk_ha.auth import AuthRequired, SignalKAuthManager
 from custom_components.signalk_ha.const import (
     CONF_BASE_URL,
@@ -761,6 +762,55 @@ async def test_run_handles_ws_error_message(hass) -> None:
 
     await coordinator._run()
     assert coordinator.last_error is not None
+
+
+async def test_run_reconnects_with_backoff(hass, monkeypatch) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    session.ws_connect = Mock(side_effect=OSError("boom"))
+    stop_event = asyncio.Event()
+
+    async def _sleep(delay: float) -> None:
+        stop_event.set()
+
+    monkeypatch.setattr(coordinator_module.random, "uniform", lambda *_: 0.0)
+    monkeypatch.setattr(coordinator_module.asyncio, "sleep", _sleep)
+
+    coordinator = SignalKCoordinator(hass, entry, session, Mock(), SignalKAuthManager(None))
+    coordinator._stop_event = stop_event
+
+    await coordinator._run()
+
+    assert coordinator.reconnect_count == 1
+    assert coordinator.last_backoff == pytest.approx(coordinator_module._BACKOFF_MIN)
+    assert coordinator.connection_state == "disconnected"
+
+
+async def test_run_backoff_increases_on_retries(hass, monkeypatch) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    session.ws_connect = Mock(side_effect=[OSError("boom1"), OSError("boom2")])
+    stop_event = asyncio.Event()
+    sleep_calls = 0
+
+    async def _sleep(delay: float) -> None:
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls >= 2:
+            stop_event.set()
+
+    monkeypatch.setattr(coordinator_module.random, "uniform", lambda *_: 0.0)
+    monkeypatch.setattr(coordinator_module.asyncio, "sleep", _sleep)
+
+    coordinator = SignalKCoordinator(hass, entry, session, Mock(), SignalKAuthManager(None))
+    coordinator._stop_event = stop_event
+
+    await coordinator._run()
+
+    assert coordinator.reconnect_count == 2
+    assert coordinator.last_backoff == pytest.approx(coordinator_module._BACKOFF_MIN * 2)
 
 
 async def test_discovery_coordinator_updates_identity(hass) -> None:

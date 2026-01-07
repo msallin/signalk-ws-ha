@@ -140,6 +140,7 @@ async def _async_update_subscriptions(hass: HomeAssistant, entry: ConfigEntry) -
     if not runtime:
         return
     # Derive subscriptions from enabled entities to keep WS traffic aligned with user intent.
+    # This prevents background data churn for entities the user has explicitly disabled.
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
     paths: list[str] = []

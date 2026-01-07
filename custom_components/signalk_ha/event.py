@@ -33,6 +33,7 @@ async def async_setup_entry(
     allowed_paths = normalize_notification_paths(
         entry.options.get(CONF_NOTIFICATION_PATHS, DEFAULT_NOTIFICATION_PATHS)
     )
+    # If the user hasn't opted in to any notification paths, keep the event platform idle.
     if not allowed_paths:
         return
 
@@ -41,6 +42,7 @@ async def async_setup_entry(
 
     allow_all = "notifications.*" in allowed_paths
     allowed_specific = {path for path in allowed_paths if path != "notifications.*"}
+    # Create only explicitly selected events up front; wildcard events are created lazily.
 
     for path in allowed_specific:
         unique_id = f"signalk:{entry.entry_id}:{path}"
@@ -124,6 +126,7 @@ class _SignalKNotificationListener:
             return
         entity = self._entities.get(path)
         if entity is None:
+            # Create event entities on demand to avoid a large static entity list.
             unique_id = f"signalk:{self._entry.entry_id}:{path}"
             existing = self._registry.async_get_entity_id("event", DOMAIN, unique_id)
             if existing:
