@@ -406,6 +406,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             url = cfg.ws_url
             ssl_context = self._build_ssl_param(cfg)
             headers = build_auth_headers(self._auth.token)
+            disconnect_reason: str | None = None
 
             self._set_state(ConnectionState.CONNECTING)
             try:
@@ -432,16 +433,21 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             msg = await ws.receive(timeout=_INACTIVITY_TIMEOUT)
                         except asyncio.TimeoutError:
                             self._record_error("Inactivity timeout")
+                            disconnect_reason = "inactivity timeout"
                             break
 
                         if msg.type == WSMsgType.TEXT:
                             self._handle_message(msg.data, cfg)
                         elif msg.type in (WSMsgType.CLOSED, WSMsgType.CLOSE, WSMsgType.CLOSING):
+                            disconnect_reason = "websocket closed"
                             break
                         elif msg.type == WSMsgType.ERROR:
                             err = ws.exception()
                             if err:
                                 self._record_error(f"WebSocket error: {err}")
+                                disconnect_reason = f"websocket error: {err}"
+                            else:
+                                disconnect_reason = "websocket error"
                             break
 
             except (asyncio.TimeoutError, ClientError, OSError) as ex:
@@ -459,6 +465,14 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._ws = None
                 if self._state == ConnectionState.CONNECTED:
                     _LOGGER.info("Disconnected from Signal K")
+                if (
+                    disconnect_reason
+                    and not self._stop_event.is_set()
+                    and self._state == ConnectionState.CONNECTED
+                ):
+                    _LOGGER.warning(
+                        "Signal K connection interrupted (%s); reconnecting", disconnect_reason
+                    )
 
             if self._stop_event.is_set():
                 break
@@ -573,6 +587,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._record_error(message)
         self._auth.mark_failure(message)
         self._set_state(ConnectionState.DISCONNECTED)
+        _LOGGER.warning("Signal K authentication failed: %s", message)
         self._start_reauth()
 
     def _log_rate_limited(self, level: int, message: str, *, key: str) -> None:
