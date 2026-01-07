@@ -14,16 +14,19 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_BASE_URL,
     CONF_HOST,
+    CONF_NOTIFICATION_PATHS,
     CONF_PORT,
     CONF_SERVER_ID,
     CONF_SERVER_VERSION,
     CONF_SSL,
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
+    DEFAULT_NOTIFICATION_PATHS,
     DOMAIN,
     NOTIFICATION_EVENT_TYPES,
 )
 from .coordinator import SignalKCoordinator
+from .notifications import normalize_notification_paths
 
 
 async def async_setup_entry(
@@ -33,16 +36,25 @@ async def async_setup_entry(
     if runtime is None:
         return
     coordinator: SignalKCoordinator = runtime.coordinator
+    allowed_paths = normalize_notification_paths(
+        entry.options.get(CONF_NOTIFICATION_PATHS, DEFAULT_NOTIFICATION_PATHS)
+    )
+    if not allowed_paths:
+        return
+
     registry = er.async_get(hass)
     entities: list[SignalKNotificationEvent] = []
-    for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
-        if registry_entry.domain != "event":
-            continue
-        path = _path_from_unique_id(entry.entry_id, registry_entry.unique_id)
-        if not path:
-            continue
-        if registry_entry.disabled:
-            continue
+
+    allow_all = "notifications.*" in allowed_paths
+    allowed_specific = {path for path in allowed_paths if path != "notifications.*"}
+
+    for path in allowed_specific:
+        unique_id = f"signalk:{entry.entry_id}:{path}"
+        entity_id = registry.async_get_entity_id("event", DOMAIN, unique_id)
+        if entity_id:
+            registry_entry = registry.async_get(entity_id)
+            if registry_entry and registry_entry.disabled:
+                continue
         entities.append(SignalKNotificationEvent(coordinator, entry, path))
 
     if entities:
@@ -53,6 +65,9 @@ async def async_setup_entry(
         entry,
         registry,
         async_add_entities,
+        allowed_paths=allowed_specific,
+        allow_all=allow_all,
+        entities={entity._path: entity for entity in entities},
     )
     entry.async_on_unload(coordinator.async_add_notification_listener(listener.handle_notification))
 
@@ -91,12 +106,18 @@ class _SignalKNotificationListener:
         entry: ConfigEntry,
         registry: er.EntityRegistry,
         async_add_entities: AddEntitiesCallback,
+        *,
+        allowed_paths: set[str],
+        allow_all: bool,
+        entities: dict[str, SignalKNotificationEvent] | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._entry = entry
         self._registry = registry
         self._async_add_entities = async_add_entities
-        self._entities: dict[str, SignalKNotificationEvent] = {}
+        self._entities: dict[str, SignalKNotificationEvent] = entities or {}
+        self._allowed_paths = allowed_paths
+        self._allow_all = allow_all
 
     @callback
     def handle_notification(self, event_data: dict[str, Any]) -> None:
@@ -104,6 +125,8 @@ class _SignalKNotificationListener:
             return
         path = event_data.get("path")
         if not isinstance(path, str) or not path.startswith("notifications."):
+            return
+        if not self._allow_all and path not in self._allowed_paths:
             return
         entity = self._entities.get(path)
         if entity is None:
@@ -187,13 +210,3 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
         configuration_url=base_url or f"{scheme}://{host}:{port}",
         serial_number=vessel_id,
     )
-
-
-def _path_from_unique_id(entry_id: str, unique_id: str | None) -> str | None:
-    if not unique_id:
-        return None
-    prefix = f"signalk:{entry_id}:"
-    if not unique_id.startswith(prefix):
-        return None
-    path = unique_id[len(prefix) :]
-    return path if path.startswith("notifications.") else None

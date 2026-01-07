@@ -48,6 +48,7 @@ If you prefer to install manually:
 | Data groups to include | Which Signal K groups are discovered (navigation, environment, tanks, etc.). | Navigation, Environment, Tanks |
 | Discovery refresh interval (hours) | How often REST discovery refreshes entity metadata. | 24 |
 | Enable Signal K notification events | Emit `signalk_ha_notification` events for `notifications.*`. | On |
+| Notification paths for Event entities | One `notifications.*` path per line to expose as Event entities. Use `notifications.*` to expose all. | None |
 
 ## How it works
 

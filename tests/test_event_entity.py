@@ -6,6 +6,7 @@ from custom_components.signalk_ha.auth import SignalKAuthManager
 from custom_components.signalk_ha.const import (
     CONF_BASE_URL,
     CONF_HOST,
+    CONF_NOTIFICATION_PATHS,
     CONF_PORT,
     CONF_SSL,
     CONF_VERIFY_SSL,
@@ -19,7 +20,7 @@ from custom_components.signalk_ha.event import _notification_event_type, async_s
 from custom_components.signalk_ha.runtime import SignalKRuntimeData
 
 
-def _make_entry() -> MockConfigEntry:
+def _make_entry(options=None) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -32,6 +33,7 @@ def _make_entry() -> MockConfigEntry:
             CONF_VESSEL_ID: "mmsi:261006533",
             CONF_VESSEL_NAME: "ONA",
         },
+        options=options or {},
     )
 
 
@@ -41,7 +43,7 @@ def test_notification_event_type_normalizes() -> None:
 
 
 async def test_event_entity_updates_on_notification(hass) -> None:
-    entry = _make_entry()
+    entry = _make_entry(options={CONF_NOTIFICATION_PATHS: ["notifications.navigation.anchor"]})
     entry.add_to_hass(hass)
 
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))

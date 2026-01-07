@@ -44,6 +44,7 @@
         "data": {
           "refresh_interval_hours": "Discovery refresh interval (hours)",
           "enable_notifications": "Enable Signal K notification events",
+          "notification_paths": "Notification paths for Event entities (one per line)",
           "groups": "Data groups to include"
         }
       }

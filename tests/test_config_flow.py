@@ -17,6 +17,7 @@ from custom_components.signalk_ha.const import (
     CONF_ENABLE_NOTIFICATIONS,
     CONF_GROUPS,
     CONF_HOST,
+    CONF_NOTIFICATION_PATHS,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
     CONF_SERVER_ID,
@@ -1007,12 +1008,20 @@ async def test_options_flow_updates_refresh_interval(hass, enable_custom_integra
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {CONF_REFRESH_INTERVAL_HOURS: 12, CONF_ENABLE_NOTIFICATIONS: False},
+        {
+            CONF_REFRESH_INTERVAL_HOURS: 12,
+            CONF_ENABLE_NOTIFICATIONS: False,
+            CONF_NOTIFICATION_PATHS: "notifications.navigation.anchor\nnavigation.course.arrival",
+        },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_REFRESH_INTERVAL_HOURS] == 12
     assert entry.options[CONF_ENABLE_NOTIFICATIONS] is False
     assert entry.options[CONF_GROUPS] == list(DEFAULT_GROUPS)
+    assert entry.options[CONF_NOTIFICATION_PATHS] == [
+        "notifications.navigation.anchor",
+        "notifications.navigation.course.arrival",
+    ]
 
 
 async def test_auth_form_falls_back_to_access_url(hass) -> None:

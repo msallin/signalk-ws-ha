@@ -12,6 +12,7 @@ CONF_INSTANCE_ID = "instance_id"
 CONF_REFRESH_INTERVAL_HOURS = "refresh_interval_hours"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_ENABLE_NOTIFICATIONS = "enable_notifications"
+CONF_NOTIFICATION_PATHS = "notification_paths"
 CONF_GROUPS = "groups"
 CONF_SERVER_ID = "server_id"
 CONF_SERVER_VERSION = "server_version"
@@ -21,6 +22,7 @@ DEFAULT_SSL = False
 DEFAULT_VERIFY_SSL = True
 DEFAULT_REFRESH_INTERVAL_HOURS = 24
 DEFAULT_ENABLE_NOTIFICATIONS = True
+DEFAULT_NOTIFICATION_PATHS: tuple[str, ...] = ()
 DEFAULT_GROUPS = ("navigation", "environment", "tanks")
 
 DEFAULT_PERIOD_MS = 5000

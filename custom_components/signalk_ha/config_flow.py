@@ -27,6 +27,7 @@ from .const import (
     CONF_GROUPS,
     CONF_HOST,
     CONF_INSTANCE_ID,
+    CONF_NOTIFICATION_PATHS,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
     CONF_SERVER_ID,
@@ -38,6 +39,7 @@ from .const import (
     CONF_WS_URL,
     DEFAULT_ENABLE_NOTIFICATIONS,
     DEFAULT_GROUPS,
+    DEFAULT_NOTIFICATION_PATHS,
     DEFAULT_PORT,
     DEFAULT_REFRESH_INTERVAL_HOURS,
     DEFAULT_SSL,
@@ -45,6 +47,7 @@ from .const import (
     DOMAIN,
 )
 from .identity import build_instance_id, resolve_vessel_identity
+from .notifications import normalize_notification_paths, paths_to_text
 from .rest import (
     DiscoveryInfo,
     async_fetch_discovery,
@@ -393,11 +396,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             hours = int(user_input[CONF_REFRESH_INTERVAL_HOURS])
             notifications_enabled = bool(user_input[CONF_ENABLE_NOTIFICATIONS])
             groups = _normalize_groups(user_input.get(CONF_GROUPS))
+            notification_paths = normalize_notification_paths(
+                user_input.get(CONF_NOTIFICATION_PATHS)
+            )
             return self.async_create_entry(
                 title="",
                 data={
                     CONF_REFRESH_INTERVAL_HOURS: hours,
                     CONF_ENABLE_NOTIFICATIONS: notifications_enabled,
+                    CONF_NOTIFICATION_PATHS: notification_paths,
                     CONF_GROUPS: groups,
                 },
             )
@@ -412,11 +419,17 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         current_notifications = self._entry.options.get(
             CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS
         )
+        current_notification_paths = paths_to_text(
+            self._entry.options.get(CONF_NOTIFICATION_PATHS, DEFAULT_NOTIFICATION_PATHS)
+        )
         group_options = _group_options()
         schema = vol.Schema(
             {
                 vol.Optional(CONF_REFRESH_INTERVAL_HOURS, default=current): vol.Coerce(int),
                 vol.Optional(CONF_ENABLE_NOTIFICATIONS, default=current_notifications): cv.boolean,
+                vol.Optional(
+                    CONF_NOTIFICATION_PATHS, default=current_notification_paths
+                ): cv.string,
                 vol.Optional(CONF_GROUPS, default=current_groups): cv.multi_select(group_options),
             }
         )
