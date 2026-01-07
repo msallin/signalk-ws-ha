@@ -25,25 +25,32 @@ Sailors do not want to debug. Reliability beats features.
 
 ## Context: Current State
 
-A minimal skeleton integration named `signalk_ha` exists with:
+Integration `signalk_ha` is in active use with a production-oriented structure:
 
-- `hacs.json`
 - `custom_components/signalk_ha/`
-  - `manifest.json` (config_flow true, iot_class local_push)
-  - `const.py`
-  - `__init__.py`
-  - `config_flow.py`
-  - `coordinator.py`
-  - `sensor.py`
-  - minimal strings/translations
+  - `__init__.py` (setup, unload, subscription refresh)
+  - `auth.py` (access request flow)
+  - `config_flow.py` (discovery + auth + options)
+  - `coordinator.py` (WS loop + discovery coordinator + notifications)
+  - `rest.py` (server discovery + REST fetch helpers)
+  - `discovery.py` (entity discovery, metadata, icons)
+  - `schema.py` (Signal K schema metadata, v1.7.1)
+  - `mapping.py` (explicit path mappings + conversions)
+  - `parser.py` (delta parsing + notifications extraction)
+  - `subscription.py` (build subscribe payloads)
+  - `sensor.py` (sensor + health entities)
+  - `geo_location.py` (navigation.position)
+  - `event.py` (notification event entities)
+  - `notifications.py` (normalize notification path selection)
+  - `diagnostics.py`
 
 Core technical choices so far:
-- WebSocket endpoint: `/signalk/v1/stream?subscribe=none`
-- Manual subscription payload after connect
-- Delta parsing into a latest-value cache
-- `DataUpdateCoordinator.async_set_updated_data` used to push updates
-
-This skeleton is functional but not production-grade. It must be refactored and extended according to the specification below.
+- Signal K server discovery via `GET {server_url}/signalk` (use `endpoints.v1`).
+- REST discovery via `/signalk/v1/api/vessels/self`.
+- WebSocket endpoint: `/signalk/v1/stream?subscribe=none` with explicit subscribe payloads.
+- Delta parsing into a latest-value cache, coalesced into HA updates.
+- Notifications pipeline: HA bus event (`signalk_ha_notification`) plus optional Event entities.
+- Schema-driven discovery with explicit overrides in `mapping.py`.
 
 ---
 
@@ -78,17 +85,17 @@ Normalize:
 - hostname casing
 
 Derived base URLs:
-- REST: `scheme://host:port/signalk/v1/api/`
-- WS: `scheme://host:port/signalk/v1/stream`
+- REST: from server discovery (`endpoints.v1["signalk-http"]`)
+- WS: from server discovery (`endpoints.v1["signalk-ws"]`)
 
 Validation:
-- Verify REST endpoint reachable.
+- Verify Signal K discovery endpoint reachable.
 - Fetch `/vessels/self`.
 - Fail fast on network, TLS, authentication, or protocol errors.
 
 Notes:
 - Do not append trailing slash to WS URL unless required.
-- Design config entry storage to support authentication later without refactoring.
+- Store server_id/server_version from discovery in the config entry.
 
 ---
 
@@ -163,6 +170,10 @@ Never create entities for:
 - nodes with meta only and no value
 
 All entities are created as `disabled_by_default`.
+
+Icons:
+- Set default icons only when no device_class icon applies.
+- Use prefix/suffix icon hints in `discovery.py`; avoid overriding HA defaults.
 
 ---
 
@@ -279,6 +290,7 @@ Staleness:
 - Maintain subscription set.
 - On reconnect: resubscribe all.
 - Prefer path-scoped subscriptions.
+- Periods are per-path and default to `DEFAULT_PERIOD_MS` (5000 ms).
 
 ---
 
@@ -318,12 +330,14 @@ Reload must be idempotent.
 Implement HA diagnostics endpoint exposing:
 - normalized REST/WS URLs (redacted)
 - vessel id + name
+- server_id + server_version
 - last REST refresh
 - WS connection state
 - subscribed path count
 - last delta timestamp
 - reconnect/backoff counters
 - metadata conflicts
+- notification counters + last notification
 
 Diagnostics must allow debugging without SSH.
 
@@ -334,15 +348,16 @@ Optional:
 
 ## Forward Planning (Architecture Must Allow)
 
-### Authentication (Later)
-- REST and WS clients must accept auth config.
-- Persist securely.
-- Redact in diagnostics.
+### Authentication (Current)
+- Access request flow exists (approve in Signal K admin UI).
+- REST/WS clients accept tokens; redact in diagnostics.
 
-### Notifications (Later)
+### Notifications (Current)
 - Treat `notifications.*` as a separate pipeline.
 - No sensors for notifications.
-- Plan for HA events and optional binary_sensors.
+- Emit HA bus events and optional Event entities.
+- Event entities are opt-in via `notification_paths` (one per line).
+- `notifications.*` in options means "allow all".
 
 ---
 
@@ -374,6 +389,7 @@ Coordinator must call these functions.
 - Options flow updates
 - Entity state updates via coordinator
 - Availability toggling
+- Event entity updates from notifications
 
 Snapshot tests must protect discovery behavior.
 
@@ -390,9 +406,25 @@ Snapshot tests must protect discovery behavior.
 ## Non-Goals (v1)
 
 - No bidirectional control (no PUT/POST to Signal K)
-- No notification forwarding yet
-- No authentication UI yet
 - No full Signal K tree mirroring
+- No notification binary_sensors (events only)
+
+---
+
+## Design Hints (Repo Structure)
+
+- REST discovery + schema metadata live in `rest.py`, `schema.py`, `discovery.py`.
+- Explicit conversions and tolerances live in `mapping.py`; do not add ad-hoc conversions elsewhere.
+- WS loop + state machine live in `coordinator.py`; keep it single-connection per config entry.
+- Notifications: parse in `parser.py`, dispatch in `coordinator.py`, surface UI in `event.py`.
+- Options flow owns user-configurable scopes (groups + notification paths).
+- Keep new logic testable via pure helpers in `parser.py`, `subscription.py`, `notifications.py`.
+
+## Code Commenting Guideline (Intent-Focused)
+
+- Add concise, high-quality comments that explain *why* a decision exists or what constraint it protects.
+- Prefer module-level and lifecycle-boundary comments (setup, discovery, subscription, throttling, auth, notifications, diagnostics).
+- Avoid narrating obvious code; comment only where it reduces future decision ambiguity.
 
 ---
 
