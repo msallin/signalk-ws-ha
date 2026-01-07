@@ -1,9 +1,9 @@
 # Signal K (signalk_ha)
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
-[![GitHub release](https://img.shields.io/github/v/release/msallin/signalk-ha)](https://github.com/msallin/signalk-ha/releases)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg?color=%2318BCF2)](https://github.com/hacs/integration)
+![GitHub Release](https://img.shields.io/github/v/release/msallin/signalk-ha?include_prereleases&sort=semver&color=%2318BCF2&link=https%3A%2F%2Fgithub.com%2Fmsallin%2Fsignalk-ha%2Freleases)
 
-This integration links Home Assistant to Signal K, turning vessel data into native entities and automation‑ready notification events. It discovers available data via REST, then keeps entities updated through the Signal K WebSocket delta stream. Multiple instances are supported: each config entry represents one Signal K server and one vessel device in Home Assistant. [Signal K](https://signalk.org) is an open marine data platform and standard for vessel data.
+[Signal K](https://signalk.org) is an open marine data platform and standard. This integration connects it to Home Assistant, turning vessel data into native entities and automation‑ready notification events. It discovers data via REST, then updates entities via the Signal K WebSocket delta stream. Multiple instances are supported: each config entry represents one Signal K server and one vessel device.
 
 ## Installation
 
@@ -22,12 +22,11 @@ If you prefer to install manually:
 1. Download the latest release ZIP from `https://github.com/msallin/signalk-ha/releases`.
 2. Extract the ZIP and copy `custom_components/signalk_ha` into your Home Assistant `config/custom_components` directory.
 3. Restart Home Assistant.
-4. Go to Settings > Devices & Services > Add Integration > Signal K.
 
 ## Configuration
 
 1. Open Settings > Devices & Services > Add Integration > Signal K.
-2. Enter host, port, TLS, and certificate verification settings.
+2. Enter parameters (see Setup parameters below).
 3. If the Signal K server requires authentication, Home Assistant creates an access request. Approve it in the Signal K admin UI (Security > Access Requests); Home Assistant continues automatically after approval.
 4. The integration fetches vessel data and creates entities (all disabled by default).
 5. Enable the entities you want in the entity registry and wait for updates.
@@ -85,16 +84,14 @@ The churn‑reduction pipeline has multiple layers that work together:
 
 ### Notifications
 
-Signal K notifications (`notifications.*`) are forwarded as Home Assistant events when enabled in Options. The event type is `signalk_<vesselname>_notification` where `<vesselname>` is the vessel name from config (slugified).
+Signal K notifications (`notifications.*`) are forwarded as Home Assistant events when enabled in Options. The event type is `signalk_<vesselname>_notification`. Notifications are also exposed as Event entities (domain `event`) so you can build automations in the UI. Each unique notification path creates an Event entity.
+
+The Home Assistant event payload includes:
 
 - Event: `signalk_<vesselname>_notification` (example: `signalk_ona_notification`)
 - Payload includes: `path`, `value`, `state`, `message`, `method`, `timestamp`, `source`, `vessel_id`, `vessel_name`, `entry_id`
 
-Notifications are also exposed as Event entities (domain `event`) so you can build automations in the UI. Each unique notification path creates an Event entity (for example, `notifications.navigation.anchor` becomes an event entity named "Navigation Anchor Notification"). The `event_type` matches the Signal K alarm state (`nominal`, `normal`, `alert`, `warn`, `alarm`, `emergency`) and the attributes include the full Signal K payload fields listed above.
-
-Example automation (anchor alarm):
-
-Signal K publishes anchor alarms under `notifications.navigation.anchor` with states like `warn`, `alarm`, or `emergency`. The following automation creates a persistent notification in Home Assistant when such an alarm is received.
+The following automation creates a persistent notification in Home Assistant when an anchor alarm is raised:
 
 ```yaml
 alias: Signal K Anchor Alarm
