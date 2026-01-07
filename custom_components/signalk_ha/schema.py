@@ -1,3 +1,5 @@
+"""Signal K schema metadata used to enrich discovery."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

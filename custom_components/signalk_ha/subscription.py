@@ -1,3 +1,5 @@
+"""Build Signal K WebSocket subscription payloads."""
+
 from __future__ import annotations
 
 from typing import Any, Iterable

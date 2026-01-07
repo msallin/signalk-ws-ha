@@ -1,3 +1,5 @@
+"""Access-request authentication helpers for Signal K."""
+
 from __future__ import annotations
 
 import asyncio

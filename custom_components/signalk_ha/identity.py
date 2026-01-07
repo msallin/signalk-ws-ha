@@ -1,3 +1,5 @@
+"""Derive stable vessel identity for registry usage."""
+
 from __future__ import annotations
 
 import hashlib

@@ -8,7 +8,6 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.signalk_ha import (
     _async_entry_updated,
     _async_update_subscriptions,
-    _path_from_unique_id,
     async_migrate_entry,
     async_setup_entry,
     async_unload_entry,
@@ -32,6 +31,7 @@ from custom_components.signalk_ha.const import (
     SK_PATH_NOTIFICATIONS,
 )
 from custom_components.signalk_ha.discovery import DiscoveredEntity, DiscoveryResult
+from custom_components.signalk_ha.entity_utils import path_from_unique_id
 from custom_components.signalk_ha.runtime import SignalKRuntimeData
 
 
@@ -291,10 +291,10 @@ async def test_update_subscriptions_uses_registry_and_periods(hass) -> None:
 
 
 def test_path_from_unique_id() -> None:
-    assert _path_from_unique_id(None) is None
-    assert _path_from_unique_id("invalid") is None
-    assert _path_from_unique_id("signalk:entry") is None
-    assert _path_from_unique_id("signalk:entry:navigation.speed") == "navigation.speed"
+    assert path_from_unique_id(None) is None
+    assert path_from_unique_id("invalid") is None
+    assert path_from_unique_id("signalk:entry") is None
+    assert path_from_unique_id("signalk:entry:navigation.speed") == "navigation.speed"
 
 
 async def test_registry_update_triggers_subscription_refresh(hass) -> None:

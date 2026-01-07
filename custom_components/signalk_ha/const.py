@@ -1,3 +1,5 @@
+"""Shared constants and defaults for the Signal K integration."""
+
 DOMAIN = "signalk_ha"
 
 CONF_HOST = "host"

@@ -1,3 +1,5 @@
+"""Geo-location entity for vessel position updates."""
+
 from __future__ import annotations
 
 import time
@@ -7,23 +9,17 @@ from homeassistant.components.geo_location import GeolocationEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    CONF_BASE_URL,
-    CONF_SERVER_ID,
-    CONF_SERVER_VERSION,
-    CONF_VESSEL_ID,
-    CONF_VESSEL_NAME,
     DEFAULT_MIN_UPDATE_SECONDS,
     DEFAULT_STALE_SECONDS,
-    DOMAIN,
     SK_PATH_POSITION,
 )
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
+from .device_info import build_device_info
 
 PARALLEL_UPDATES = 1
 
@@ -70,27 +66,6 @@ def _registry_has_geolocation(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
 
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    host = entry.data["host"]
-    port = entry.data["port"]
-    ssl = entry.data["ssl"]
-    scheme = "https" if ssl else "http"
-    vessel_name = entry.data.get(CONF_VESSEL_NAME, "Unknown Vessel")
-    base_url = entry.data.get(CONF_BASE_URL)
-    vessel_id = entry.data.get(CONF_VESSEL_ID)
-    server_id = entry.data.get(CONF_SERVER_ID) or None
-    server_version = entry.data.get(CONF_SERVER_VERSION) or None
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name=vessel_name,
-        manufacturer="Signal K",
-        model=server_id,
-        sw_version=server_version,
-        configuration_url=base_url or f"{scheme}://{host}:{port}",
-        serial_number=vessel_id,
-    )
-
-
 class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
     _attr_entity_registry_enabled_default = False
     _attr_source = "Signal K"
@@ -105,7 +80,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         super().__init__(coordinator)
         self._entry = entry
         self._discovery = discovery
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = build_device_info(entry)
         self._description = _position_description(discovery)
         self._spec_known = _position_spec_known(discovery)
 

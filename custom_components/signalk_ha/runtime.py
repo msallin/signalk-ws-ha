@@ -1,3 +1,5 @@
+"""Runtime container for coordinators and auth manager."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,5 @@
+"""REST discovery of Signal K paths into entity specs."""
+
 from __future__ import annotations
 
 from collections import Counter

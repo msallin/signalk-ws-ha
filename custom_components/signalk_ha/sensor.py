@@ -1,3 +1,5 @@
+"""Sensor entities and health metrics for Signal K data."""
+
 from __future__ import annotations
 
 import time
@@ -8,21 +10,14 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    CONF_BASE_URL,
-    CONF_SERVER_ID,
-    CONF_SERVER_VERSION,
-    CONF_VESSEL_ID,
-    CONF_VESSEL_NAME,
     DEFAULT_MIN_UPDATE_SECONDS,
     DEFAULT_STALE_SECONDS,
-    DOMAIN,
     HEALTH_SENSOR_CONNECTION_STATE,
     HEALTH_SENSOR_LAST_ERROR,
     HEALTH_SENSOR_LAST_MESSAGE,
@@ -34,7 +29,9 @@ from .const import (
     HEALTH_SENSOR_RECONNECT_COUNT,
 )
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
+from .device_info import build_device_info
 from .discovery import DiscoveredEntity, convert_value
+from .entity_utils import path_from_unique_id
 
 PARALLEL_UPDATES = 1
 
@@ -50,27 +47,6 @@ class HealthSpec:
     attributes_fn: Callable[[Any], dict[str, Any]] | None = None
     unit: str | None = None
     suggested_display_precision: int | None = None
-
-
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    host = entry.data["host"]
-    port = entry.data["port"]
-    ssl = entry.data["ssl"]
-    scheme = "https" if ssl else "http"
-    vessel_name = entry.data.get(CONF_VESSEL_NAME, "Unknown Vessel")
-    base_url = entry.data.get(CONF_BASE_URL)
-    vessel_id = entry.data.get(CONF_VESSEL_ID)
-    server_id = entry.data.get(CONF_SERVER_ID) or None
-    server_version = entry.data.get(CONF_SERVER_VERSION) or None
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name=vessel_name,
-        manufacturer="Signal K",
-        model=server_id,
-        sw_version=server_version,
-        configuration_url=base_url or f"{scheme}://{host}:{port}",
-        serial_number=vessel_id,
-    )
 
 
 async def async_setup_entry(
@@ -174,7 +150,7 @@ def _registry_sensor_specs(hass: HomeAssistant, entry: ConfigEntry) -> list[Disc
     for registry_entry in entries:
         if registry_entry.domain != "sensor":
             continue
-        path = _path_from_unique_id(registry_entry.unique_id)
+        path = path_from_unique_id(registry_entry.unique_id)
         if not path:
             continue
         name = registry_entry.original_name or registry_entry.name or path.split(".")[-1]
@@ -206,7 +182,7 @@ class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._entry = entry
         self._discovery = discovery
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = build_device_info(entry)
         self._last_native_value: Any = None
         self._last_write: float | None = None
         self._last_available: bool | None = None
@@ -398,18 +374,6 @@ def _path_available(path: str, discovery: SignalKDiscoveryCoordinator | None) ->
     if not discovery or not discovery.data:
         return True
     return path in discovery.data.paths
-
-
-def _path_from_unique_id(unique_id: str | None) -> str | None:
-    if not unique_id:
-        return None
-    prefix = "signalk:"
-    if not unique_id.startswith(prefix):
-        return None
-    parts = unique_id.split(":", 2)
-    if len(parts) != 3:
-        return None
-    return parts[2]
 
 
 def _last_notification_attributes(coordinator: SignalKCoordinator) -> dict[str, Any] | None:

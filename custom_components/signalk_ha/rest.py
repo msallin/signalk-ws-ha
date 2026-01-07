@@ -1,3 +1,5 @@
+"""HTTP helpers for Signal K discovery and vessel data."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,5 @@
+"""WebSocket state machine and data coordinator for Signal K updates."""
+
 from __future__ import annotations
 
 import asyncio

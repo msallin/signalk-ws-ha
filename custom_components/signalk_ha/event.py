@@ -1,3 +1,5 @@
+"""Notification event entities and dynamic path filtering."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -6,26 +8,18 @@ from homeassistant.components.event import EventEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    CONF_BASE_URL,
-    CONF_HOST,
     CONF_NOTIFICATION_PATHS,
-    CONF_PORT,
-    CONF_SERVER_ID,
-    CONF_SERVER_VERSION,
-    CONF_SSL,
-    CONF_VESSEL_ID,
-    CONF_VESSEL_NAME,
     DEFAULT_NOTIFICATION_PATHS,
     DOMAIN,
     NOTIFICATION_EVENT_TYPES,
 )
 from .coordinator import SignalKCoordinator
+from .device_info import build_device_info
 from .notifications import normalize_notification_paths
 
 
@@ -82,7 +76,7 @@ class SignalKNotificationEvent(CoordinatorEntity, EventEntity):
         self._path = path
         self._attr_unique_id = f"signalk:{entry.entry_id}:{path}"
         self._attr_name = _notification_name(path)
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = build_device_info(entry)
 
     @property
     def available(self) -> bool:
@@ -189,24 +183,3 @@ def _humanize_segment(segment: str) -> str:
     spaced = "".join((" " + c if c.isupper() else c) for c in segment).strip()
     spaced = spaced.replace("_", " ")
     return spaced[:1].upper() + spaced[1:] if spaced else ""
-
-
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    host = entry.data[CONF_HOST]
-    port = entry.data[CONF_PORT]
-    ssl = entry.data[CONF_SSL]
-    scheme = "https" if ssl else "http"
-    vessel_name = entry.data.get(CONF_VESSEL_NAME, "Unknown Vessel")
-    base_url = entry.data.get(CONF_BASE_URL)
-    vessel_id = entry.data.get(CONF_VESSEL_ID)
-    server_id = entry.data.get(CONF_SERVER_ID) or None
-    server_version = entry.data.get(CONF_SERVER_VERSION) or None
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name=vessel_name,
-        manufacturer="Signal K",
-        model=server_id,
-        sw_version=server_version,
-        configuration_url=base_url or f"{scheme}://{host}:{port}",
-        serial_number=vessel_id,
-    )

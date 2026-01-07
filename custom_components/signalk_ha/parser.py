@@ -1,3 +1,5 @@
+"""Parse Signal K deltas into values and notifications."""
+
 from __future__ import annotations
 
 import json

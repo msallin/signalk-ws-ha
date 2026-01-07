@@ -1,3 +1,5 @@
+"""Explicit path mappings and unit conversions for known Signal K fields."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

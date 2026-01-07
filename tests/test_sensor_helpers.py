@@ -22,17 +22,17 @@ from custom_components.signalk_ha.const import (
     DOMAIN,
 )
 from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoordinator
+from custom_components.signalk_ha.device_info import build_device_info
 from custom_components.signalk_ha.discovery import DiscoveredEntity, DiscoveryResult
+from custom_components.signalk_ha.entity_utils import path_from_unique_id
 from custom_components.signalk_ha.sensor import (
     HealthSpec,
     SignalKHealthSensor,
     SignalKSensor,
-    _device_info,
     _is_stale,
     _last_notification_attributes,
     _last_seen,
     _path_available,
-    _path_from_unique_id,
     _registry_sensor_specs,
     _sensor_specs,
     _SignalKDiscoveryListener,
@@ -456,7 +456,7 @@ def test_sensor_should_write_state_numeric_change_no_tolerance() -> None:
 
 def test_device_info_uses_base_url() -> None:
     entry = _make_entry()
-    info = _device_info(entry)
+    info = build_device_info(entry)
     assert info["name"] == "ONA"
     assert info["configuration_url"] == entry.data[CONF_BASE_URL]
     assert info["model"] == entry.data[CONF_SERVER_ID]
@@ -476,7 +476,7 @@ def test_sensor_specs_empty_without_data() -> None:
 
 
 def test_path_from_unique_id_sensor() -> None:
-    assert _path_from_unique_id(None) is None
-    assert _path_from_unique_id("bad") is None
-    assert _path_from_unique_id("signalk:entry") is None
-    assert _path_from_unique_id("signalk:entry:navigation.speed") == "navigation.speed"
+    assert path_from_unique_id(None) is None
+    assert path_from_unique_id("bad") is None
+    assert path_from_unique_id("signalk:entry") is None
+    assert path_from_unique_id("signalk:entry:navigation.speed") == "navigation.speed"

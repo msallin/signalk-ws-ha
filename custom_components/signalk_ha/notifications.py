@@ -1,3 +1,5 @@
+"""Normalize user input for notification path selection."""
+
 from __future__ import annotations
 
 from typing import Any, Iterable

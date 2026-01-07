@@ -1,3 +1,5 @@
+"""Config and options flows for connecting to Signal K."""
+
 from __future__ import annotations
 
 import asyncio

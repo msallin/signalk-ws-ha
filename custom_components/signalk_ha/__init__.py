@@ -1,3 +1,5 @@
+"""Integration entrypoints and lifecycle wiring for Signal K."""
+
 from __future__ import annotations
 
 import logging
@@ -33,6 +35,7 @@ from .const import (
     SK_PATH_NOTIFICATIONS,
 )
 from .coordinator import SignalKCoordinator, SignalKDiscoveryCoordinator
+from .entity_utils import path_from_unique_id
 from .identity import build_instance_id
 from .rest import normalize_base_url, normalize_ws_url
 from .runtime import SignalKRuntimeData
@@ -152,7 +155,7 @@ async def _async_update_subscriptions(hass: HomeAssistant, entry: ConfigEntry) -
             continue
         if registry_entry.domain == "event":
             continue
-        path = _path_from_unique_id(registry_entry.unique_id)
+        path = path_from_unique_id(registry_entry.unique_id)
         if path:
             paths.append(path)
             periods[path] = discovery_periods.get(path, DEFAULT_PERIOD_MS)
@@ -161,15 +164,3 @@ async def _async_update_subscriptions(hass: HomeAssistant, entry: ConfigEntry) -
             paths.append(SK_PATH_NOTIFICATIONS)
             periods[SK_PATH_NOTIFICATIONS] = DEFAULT_PERIOD_MS
     await runtime.coordinator.async_update_paths(paths, periods)
-
-
-def _path_from_unique_id(unique_id: str | None) -> str | None:
-    if not unique_id:
-        return None
-    prefix = "signalk:"
-    if not unique_id.startswith(prefix):
-        return None
-    parts = unique_id.split(":", 2)
-    if len(parts) != 3:
-        return None
-    return parts[2]
