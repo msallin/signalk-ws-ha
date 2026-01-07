@@ -16,7 +16,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    DEFAULT_MIN_UPDATE_SECONDS,
+    DEFAULT_MAX_IDLE_WRITE_SECONDS,
+    DEFAULT_MIN_UPDATE_MS,
     DEFAULT_STALE_SECONDS,
     HEALTH_SENSOR_CONNECTION_STATE,
     HEALTH_SENSOR_LAST_ERROR,
@@ -208,6 +209,9 @@ class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
         # Enforce a minimum write interval to protect the recorder/UI from WS bursts.
         if now - self._last_write < min_interval:
             return False
+        # Refresh state periodically even if values only drift within tolerance.
+        if now - self._last_write >= DEFAULT_MAX_IDLE_WRITE_SECONDS:
+            return True
 
         if value is None and self._last_native_value is not None:
             return True
@@ -224,7 +228,7 @@ class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
         return None
 
     def _min_update_seconds(self) -> float:
-        return DEFAULT_MIN_UPDATE_SECONDS
+        return DEFAULT_MIN_UPDATE_MS / 1000.0
 
 
 class SignalKSensor(SignalKBaseSensor):
@@ -273,12 +277,17 @@ class SignalKSensor(SignalKBaseSensor):
             "path": self._spec.path,
             "last_seen": last_seen,
             "spec_known": self._spec.spec_known,
+            "subscription_period_ms": self._spec.period_ms,
+            "min_update_seconds": self._min_update_seconds(),
+            "stale_seconds": DEFAULT_STALE_SECONDS,
         }
         if self._spec.description:
             attrs["description"] = self._spec.description
         source = self.coordinator.last_source_by_path.get(self._spec.path)
         if source:
             attrs["source"] = source
+        if self._spec.tolerance is not None:
+            attrs["tolerance"] = self._spec.tolerance
         return attrs
 
     def _tolerance(self) -> float | None:
@@ -286,7 +295,7 @@ class SignalKSensor(SignalKBaseSensor):
 
     def _min_update_seconds(self) -> float:
         if self._spec.min_update_seconds is None:
-            return DEFAULT_MIN_UPDATE_SECONDS
+            return DEFAULT_MIN_UPDATE_MS / 1000.0
         return self._spec.min_update_seconds
 
 

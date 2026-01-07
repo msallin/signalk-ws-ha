@@ -18,7 +18,8 @@ from custom_components.signalk_ha.const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     CONF_WS_URL,
-    DEFAULT_MIN_UPDATE_SECONDS,
+    DEFAULT_MAX_IDLE_WRITE_SECONDS,
+    DEFAULT_MIN_UPDATE_MS,
     DOMAIN,
 )
 from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoordinator
@@ -255,6 +256,29 @@ def test_sensor_should_write_state_respects_tolerance() -> None:
     assert sensor._should_write_state(10.05, True) is False
 
 
+def test_sensor_should_write_state_after_max_idle() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=0.1,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+    sensor._last_write = time.monotonic() - DEFAULT_MAX_IDLE_WRITE_SECONDS - 1.0
+    sensor._last_native_value = 10.0
+    sensor._last_available = True
+
+    assert sensor._should_write_state(10.05, True) is True
+
+
 def test_sensor_should_write_state_on_availability_change() -> None:
     entry = _make_entry()
     spec = DiscoveredEntity(
@@ -398,7 +422,7 @@ def test_base_sensor_defaults() -> None:
     spec = HealthSpec("connection_state", "Connection State", lambda coord: coord.connection_state)
     sensor = SignalKHealthSensor(coordinator, entry, spec)
     assert sensor._tolerance() is None
-    assert sensor._min_update_seconds() == DEFAULT_MIN_UPDATE_SECONDS
+    assert sensor._min_update_seconds() == DEFAULT_MIN_UPDATE_MS / 1000.0
 
 
 def test_health_sensor_attributes_empty() -> None:

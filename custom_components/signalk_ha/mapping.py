@@ -39,7 +39,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=Conversion.MS_TO_KNOTS,
         expected_units=("m/s",),
-        tolerance=0.02,
+        tolerance=0.2,
     ),
     "navigation.speedThroughWater": PathMapping(
         unit="kn",
@@ -47,7 +47,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=Conversion.MS_TO_KNOTS,
         expected_units=("m/s",),
-        tolerance=0.02,
+        tolerance=0.2,
     ),
     "navigation.courseOverGroundTrue": PathMapping(
         unit="deg",
@@ -111,7 +111,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=Conversion.MS_TO_KNOTS,
         expected_units=("m/s",),
-        tolerance=0.1,
+        tolerance=0.5,
     ),
     "environment.wind.speedTrue": PathMapping(
         unit="kn",
@@ -119,7 +119,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=Conversion.MS_TO_KNOTS,
         expected_units=("m/s",),
-        tolerance=0.1,
+        tolerance=0.5,
     ),
     "environment.wind.speedOverGround": PathMapping(
         unit="kn",
@@ -127,7 +127,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=Conversion.MS_TO_KNOTS,
         expected_units=("m/s",),
-        tolerance=0.1,
+        tolerance=0.5,
     ),
     "environment.wind.angleApparent": PathMapping(
         unit="deg",

@@ -14,7 +14,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    DEFAULT_MIN_UPDATE_SECONDS,
+    DEFAULT_MAX_IDLE_WRITE_SECONDS,
+    DEFAULT_MIN_UPDATE_MS,
+    DEFAULT_PERIOD_MS,
+    DEFAULT_POSITION_TOLERANCE_DEG,
     DEFAULT_STALE_SECONDS,
     SK_PATH_POSITION,
 )
@@ -128,6 +131,10 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         data = super().state_attributes
         data["path"] = SK_PATH_POSITION
         data["spec_known"] = self._spec_known
+        data["subscription_period_ms"] = DEFAULT_PERIOD_MS
+        data["min_update_ms"] = DEFAULT_MIN_UPDATE_MS
+        data["stale_seconds"] = DEFAULT_STALE_SECONDS
+        data["tolerance"] = DEFAULT_POSITION_TOLERANCE_DEG
         if self._description:
             data["description"] = self._description
         source = self.coordinator.last_source_by_path.get(SK_PATH_POSITION)
@@ -162,14 +169,16 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
             return True
 
         now = time.monotonic()
-        if now - self._last_write >= DEFAULT_MIN_UPDATE_SECONDS:
+        if now - self._last_write < DEFAULT_MIN_UPDATE_MS / 1000.0:
+            return False
+        if now - self._last_write >= DEFAULT_MAX_IDLE_WRITE_SECONDS:
             return True
 
         if coords is None and self._last_coords is not None:
             return True
 
         if coords and self._last_coords:
-            return _coord_distance(coords, self._last_coords) > 0.00002
+            return _coord_distance(coords, self._last_coords) > DEFAULT_POSITION_TOLERANCE_DEG
         return coords != self._last_coords
 
 

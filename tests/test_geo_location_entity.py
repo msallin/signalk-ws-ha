@@ -17,7 +17,8 @@ from custom_components.signalk_ha.const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     CONF_WS_URL,
-    DEFAULT_MIN_UPDATE_SECONDS,
+    DEFAULT_MAX_IDLE_WRITE_SECONDS,
+    DEFAULT_MIN_UPDATE_MS,
     DOMAIN,
 )
 from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoordinator
@@ -446,7 +447,7 @@ def test_geo_location_should_write_state_respects_tolerance() -> None:
     geo = SignalKPositionGeolocation(coordinator, discovery, entry)
     geo._last_coords = (1.0, 2.0)
     geo._last_available = True
-    geo._last_write = time.monotonic()
+    geo._last_write = time.monotonic() - (DEFAULT_MIN_UPDATE_MS / 1000.0)
 
     assert geo._should_write_state((1.000001, 2.000001), True) is False
     assert geo._should_write_state((1.01, 2.01), True) is True
@@ -569,7 +570,19 @@ def test_geo_location_should_write_state_min_interval() -> None:
     geo = SignalKPositionGeolocation(coordinator, discovery, entry)
     geo._last_coords = (1.0, 2.0)
     geo._last_available = True
-    geo._last_write = time.monotonic() - DEFAULT_MIN_UPDATE_SECONDS
+    geo._last_write = time.monotonic() - (DEFAULT_MIN_UPDATE_MS / 1000.0)
+
+    assert geo._should_write_state((1.0, 2.0), True) is False
+
+
+def test_geo_location_should_write_state_after_max_idle() -> None:
+    entry = _make_entry()
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[], conflicts=[]))
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    geo = SignalKPositionGeolocation(coordinator, discovery, entry)
+    geo._last_coords = (1.0, 2.0)
+    geo._last_available = True
+    geo._last_write = time.monotonic() - DEFAULT_MAX_IDLE_WRITE_SECONDS - 1.0
 
     assert geo._should_write_state((1.0, 2.0), True) is True
 
@@ -581,6 +594,6 @@ def test_geo_location_should_write_state_when_coords_cleared() -> None:
     geo = SignalKPositionGeolocation(coordinator, discovery, entry)
     geo._last_coords = (1.0, 2.0)
     geo._last_available = True
-    geo._last_write = time.monotonic()
+    geo._last_write = time.monotonic() - (DEFAULT_MIN_UPDATE_MS / 1000.0)
 
     assert geo._should_write_state(None, True) is True

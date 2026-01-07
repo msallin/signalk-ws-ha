@@ -31,8 +31,14 @@ DEFAULT_PERIOD_MS = 5000
 DEFAULT_FORMAT = "delta"
 DEFAULT_POLICY = "ideal"
 
-DEFAULT_MIN_UPDATE_SECONDS = 5.0
+# Minimum write cadence guard in Home Assistant (milliseconds); we cannot rely on
+# Signal K subscription periods alone to protect the recorder/UI from bursts.
+DEFAULT_MIN_UPDATE_MS = 5000
+# Force a periodic write even when values stay within tolerance to keep HA fresh.
+DEFAULT_MAX_IDLE_WRITE_SECONDS = 60.0
 DEFAULT_STALE_SECONDS = 300.0
+# Position tolerance in degrees (~3.5 m latitude at the equator).
+DEFAULT_POSITION_TOLERANCE_DEG = 0.0000315
 
 SK_PATH_POSITION = "navigation.position"
 SK_PATH_NOTIFICATIONS = "notifications.*"
