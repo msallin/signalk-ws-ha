@@ -1,4 +1,5 @@
 import time
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -275,6 +276,8 @@ def test_sensor_should_write_state_after_max_idle() -> None:
     sensor._last_write = time.monotonic() - DEFAULT_MAX_IDLE_WRITE_SECONDS - 1.0
     sensor._last_native_value = 10.0
     sensor._last_available = True
+    sensor._last_seen_at = dt_util.utcnow() - timedelta(seconds=10)
+    coordinator._last_update_by_path["navigation.speedOverGround"] = dt_util.utcnow()
 
     assert sensor._should_write_state(10.05, True) is True
 

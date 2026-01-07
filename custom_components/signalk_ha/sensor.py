@@ -196,6 +196,7 @@ class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
             self._last_native_value = value
             self._last_available = available
             self._last_write = time.monotonic()
+            self._record_write()
             self.async_write_ha_state()
 
     def _should_write_state(self, value: Any, available: bool) -> bool:
@@ -209,8 +210,11 @@ class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
         # Enforce a minimum write interval to protect the recorder/UI from WS bursts.
         if now - self._last_write < min_interval:
             return False
-        # Refresh state periodically even if values only drift within tolerance.
-        if now - self._last_write >= DEFAULT_MAX_IDLE_WRITE_SECONDS:
+        # Refresh state periodically only when fresh updates are arriving from the server.
+        if (
+            now - self._last_write >= DEFAULT_MAX_IDLE_WRITE_SECONDS
+            and self._should_refresh_on_idle()
+        ):
             return True
 
         if value is None and self._last_native_value is not None:
@@ -230,6 +234,12 @@ class SignalKBaseSensor(CoordinatorEntity, SensorEntity):
     def _min_update_seconds(self) -> float:
         return DEFAULT_MIN_UPDATE_MS / 1000.0
 
+    def _should_refresh_on_idle(self) -> bool:
+        return True
+
+    def _record_write(self) -> None:
+        return None
+
 
 class SignalKSensor(SignalKBaseSensor):
     _attr_entity_registry_enabled_default = False
@@ -245,6 +255,7 @@ class SignalKSensor(SignalKBaseSensor):
         self._spec = spec
         self._attr_name = spec.name
         self._attr_unique_id = f"signalk:{entry.entry_id}:{spec.path}"
+        self._last_seen_at: dt_util.dt | None = None
         if spec.device_class:
             self._attr_device_class = spec.device_class
         if spec.state_class:
@@ -298,6 +309,22 @@ class SignalKSensor(SignalKBaseSensor):
             return DEFAULT_MIN_UPDATE_MS / 1000.0
         return self._spec.min_update_seconds
 
+    def _should_refresh_on_idle(self) -> bool:
+        last_seen = self._current_seen_at()
+        if last_seen is None:
+            return False
+        if getattr(self, "_last_seen_at", None) is None:
+            return True
+        return last_seen > self._last_seen_at
+
+    def _record_write(self) -> None:
+        last_seen = self._current_seen_at()
+        if last_seen is not None:
+            self._last_seen_at = last_seen
+
+    def _current_seen_at(self) -> dt_util.dt | None:
+        return self.coordinator.last_update_by_path.get(self._spec.path)
+
 
 class SignalKHealthSensor(SignalKBaseSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -330,6 +357,9 @@ class SignalKHealthSensor(SignalKBaseSensor):
         if not self._spec.attributes_fn:
             return {}
         return self._spec.attributes_fn(self.coordinator) or {}
+
+    def _should_refresh_on_idle(self) -> bool:
+        return False
 
 
 class _SignalKDiscoveryListener:

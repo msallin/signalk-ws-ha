@@ -583,6 +583,8 @@ def test_geo_location_should_write_state_after_max_idle() -> None:
     geo._last_coords = (1.0, 2.0)
     geo._last_available = True
     geo._last_write = time.monotonic() - DEFAULT_MAX_IDLE_WRITE_SECONDS - 1.0
+    geo._last_seen_at = dt_util.utcnow() - timedelta(seconds=10)
+    coordinator._last_update_by_path["navigation.position"] = dt_util.utcnow()
 
     assert geo._should_write_state((1.0, 2.0), True) is True
 

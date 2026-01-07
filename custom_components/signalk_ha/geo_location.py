@@ -92,6 +92,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         self._last_coords: tuple[float, float] | None = None
         self._last_write: float | None = None
         self._last_available: bool | None = None
+        self._last_seen_at: dt_util.dt | None = None
 
     @property
     def available(self) -> bool:
@@ -153,6 +154,9 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
             self._last_coords = coords
             self._last_available = available
             self._last_write = time.monotonic()
+            last_seen = self._current_seen_at()
+            if last_seen is not None:
+                self._last_seen_at = last_seen
             self.async_write_ha_state()
 
     def _coords(self) -> tuple[float, float] | None:
@@ -172,7 +176,11 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         if now - self._last_write < DEFAULT_MIN_UPDATE_MS / 1000.0:
             return False
         if now - self._last_write >= DEFAULT_MAX_IDLE_WRITE_SECONDS:
-            return True
+            last_seen = self._current_seen_at()
+            if last_seen is not None and (
+                self._last_seen_at is None or last_seen > self._last_seen_at
+            ):
+                return True
 
         if coords is None and self._last_coords is not None:
             return True
@@ -180,6 +188,9 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         if coords and self._last_coords:
             return _coord_distance(coords, self._last_coords) > DEFAULT_POSITION_TOLERANCE_DEG
         return coords != self._last_coords
+
+    def _current_seen_at(self) -> dt_util.dt | None:
+        return self.coordinator.last_update_by_path.get(SK_PATH_POSITION)
 
 
 def _coord_distance(a: tuple[float, float], b: tuple[float, float]) -> float:
