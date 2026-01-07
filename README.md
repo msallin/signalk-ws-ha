@@ -56,22 +56,28 @@ Signal K is broad and high‑rate, so the integration intentionally separates di
 
 ### Discovery
 
-Discovery starts with the Signal K server discovery document (`GET /signalk`), then fetches `/signalk/v1/api/vessels/self` to build entity metadata for the selected data groups.
+Discovery starts with the Signal K server discovery document (`GET /signalk`) to resolve the REST and WebSocket endpoints, then fetches `/signalk/v1/api/vessels/self` to build the entity catalog for the selected data groups.
 REST discovery runs on startup and every 24 hours (configurable in Options); missing paths are marked unavailable with `last_seen`, and entities are never deleted automatically.
+Discovery is idempotent: re‑runs can add new entities or refresh metadata without breaking existing entity IDs.
 
 ### Entity creation
 
 Entities are created from discovered paths and start disabled by default so you can choose what you actually want to update in Home Assistant.
+For each path, the integration first consults the Signal K schema metadata, then merges in vessel‑specific metadata from `/vessels/self`. The entity attribute `spec_known` indicates whether the path exists in the Signal K specification.
+Units and icons are suggested when metadata is available, and names are made human‑readable; if duplicates exist, names are disambiguated using their path context (e.g., “Navigation Speed Over Ground” vs “Wind Speed Over Ground”).
 `navigation.position` is exposed as a Geo Location entity.
 
 ### Subscriptions
 
 WebSocket subscriptions use the discovered stream endpoint and resubscribe after reconnects.
 Only enabled entity paths are subscribed using `format=delta` and `policy=ideal`, and `notifications.*` is added when notification events are enabled.
+Per‑path periods are applied when available so high‑rate signals don’t overwhelm Home Assistant.
 
 ### Updates
 
 Incoming deltas update the internal cache and are throttled before writing state to Home Assistant, reducing recorder and UI load.
+The integration applies per‑path tolerances so tiny value changes don’t spam the recorder.
+Stale entities are marked unavailable when updates stop.
 
 ### Notifications
 
