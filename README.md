@@ -75,9 +75,13 @@ Per‑path periods are applied when available so high‑rate signals don’t ove
 
 ### Updates
 
-Incoming deltas update the internal cache and are throttled before writing state to Home Assistant, reducing recorder and UI load.
-The integration applies per‑path tolerances so tiny value changes don’t spam the recorder.
-Stale entities are marked unavailable when updates stop.
+Incoming deltas update an internal cache and are throttled before writing state to Home Assistant, reducing recorder and UI load.
+The churn‑reduction pipeline has multiple layers that work together:
+
+- Server-side throttling: subscriptions send `minPeriod` (max rate) and `period` (keepalive) so the Signal K server reduces bursts before HA sees them.
+- Coordinator coalescing: updates are buffered for a short window so many deltas collapse into a single HA state update.
+- Entity throttling: each entity enforces `min_update_ms` plus per‑path tolerances so tiny changes do not trigger writes.
+- Staleness: if updates stop, entities are marked unavailable after `stale_seconds`.
 
 ### Notifications
 
