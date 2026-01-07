@@ -37,7 +37,8 @@ DEFAULT_STALE_SECONDS = 300.0
 SK_PATH_POSITION = "navigation.position"
 SK_PATH_NOTIFICATIONS = "notifications.*"
 
-EVENT_SIGNAL_K_NOTIFICATION = "signalk_ha_notification"
+EVENT_SIGNAL_K_NOTIFICATION_PREFIX = "signalk"
+EVENT_SIGNAL_K_NOTIFICATION_SUFFIX = "notification"
 
 HEALTH_SENSOR_CONNECTION_STATE = "connection_state"
 HEALTH_SENSOR_LAST_MESSAGE = "last_message"
@@ -58,3 +59,10 @@ NOTIFICATION_EVENT_TYPES = (
     "emergency",
     "unknown",
 )
+
+
+def notification_event_type(vessel_name: str | None) -> str:
+    from homeassistant.util import slugify
+
+    slug = slugify(vessel_name or "vessel") or "vessel"
+    return f"{EVENT_SIGNAL_K_NOTIFICATION_PREFIX}_{slug}_{EVENT_SIGNAL_K_NOTIFICATION_SUFFIX}"

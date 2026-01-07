@@ -3,7 +3,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/v/release/msallin/signalk-ha)](https://github.com/msallin/signalk-ha/releases)
 
-This Home Assistant integration discovers and subscribes to a Signal K server, exposing its data as Home Assistant entities and notifications as events. [Signal K](https://signalk.org) is an open marine data platform and standard for vessel data. It first discovers available data via REST and subscribes to updates using WebSocket. Furthermore, it exposes all vessel notifications as Home Assistant events to be used in automations.
+This integration links Home Assistant to Signal K, turning vessel data into native entities and automation‑ready notification events. It discovers available data via REST, then keeps entities updated through the Signal K WebSocket delta stream. Multiple instances are supported: each config entry represents one Signal K server and one vessel device in Home Assistant. [Signal K](https://signalk.org) is an open marine data platform and standard for vessel data.
 
 ## Installation
 
@@ -29,7 +29,7 @@ If you prefer to install manually:
 1. Open Settings > Devices & Services > Add Integration > Signal K.
 2. Enter host, port, TLS, and certificate verification settings.
 3. If the Signal K server requires authentication, Home Assistant creates an access request. Approve it in the Signal K admin UI (Security > Access Requests); Home Assistant continues automatically after approval.
-4. The integration fetches `/signalk/v1/api/vessels/self` and creates entities (all disabled by default).
+4. The integration fetches vessel data and creates entities (all disabled by default).
 5. Enable the entities you want in the entity registry and wait for updates.
 
 ### Setup parameters
@@ -47,22 +47,37 @@ If you prefer to install manually:
 | --- | --- | --- |
 | Data groups to include | Which Signal K groups are discovered (navigation, environment, tanks, etc.). | Navigation, Environment, Tanks |
 | Discovery refresh interval (hours) | How often REST discovery refreshes entity metadata. | 24 |
-| Enable Signal K notification events | Emit `signalk_ha_notification` events for `notifications.*`. | On |
+| Enable Signal K notification events | Emit `signalk_<vesselname>_notification` events for `notifications.*` (vessel name slugified). | On |
 | Notification paths for Event entities | One `notifications.*` path per line to expose as Event entities. Use `notifications.*` to expose all. | None |
 
 ## How it works
 
-- REST discovery runs on startup and every 24 hours (configurable in Options).
-- WebSocket endpoint is fixed: `/signalk/v1/stream?subscribe=none`.
-- The integration subscribes only to enabled entity paths using `format=delta` and `policy=ideal`.
-- `navigation.position` is exposed as a Geo Location entity.
-- Entities are never deleted automatically; missing paths become unavailable with `last_seen`.
+Signal K is broad and high‑rate, so the integration intentionally separates discovery from live updates. It discovers the full data model, creates entities (disabled by default), and then subscribes only to the enabled entity paths. This limits data churn in Home Assistant and keeps CPU usage low.
+
+### Discovery
+
+Discovery starts with the Signal K server discovery document (`GET /signalk`), then fetches `/signalk/v1/api/vessels/self` to build entity metadata for the selected data groups.
+REST discovery runs on startup and every 24 hours (configurable in Options); missing paths are marked unavailable with `last_seen`, and entities are never deleted automatically.
+
+### Entity creation
+
+Entities are created from discovered paths and start disabled by default so you can choose what you actually want to update in Home Assistant.
+`navigation.position` is exposed as a Geo Location entity.
+
+### Subscriptions
+
+WebSocket subscriptions use the discovered stream endpoint and resubscribe after reconnects.
+Only enabled entity paths are subscribed using `format=delta` and `policy=ideal`, and `notifications.*` is added when notification events are enabled.
+
+### Updates
+
+Incoming deltas update the internal cache and are throttled before writing state to Home Assistant, reducing recorder and UI load.
 
 ### Notifications
 
-Signal K notifications (`notifications.*`) are forwarded as Home Assistant events when enabled in Options.
+Signal K notifications (`notifications.*`) are forwarded as Home Assistant events when enabled in Options. The event type is `signalk_<vesselname>_notification` where `<vesselname>` is the vessel name from config (slugified).
 
-- Event: `signalk_ha_notification`
+- Event: `signalk_<vesselname>_notification` (example: `signalk_ona_notification`)
 - Payload includes: `path`, `value`, `state`, `message`, `method`, `timestamp`, `source`, `vessel_id`, `vessel_name`, `entry_id`
 
 Notifications are also exposed as Event entities (domain `event`) so you can build automations in the UI. Each unique notification path creates an Event entity (for example, `notifications.navigation.anchor` becomes an event entity named "Navigation Anchor Notification"). The `event_type` matches the Signal K alarm state (`nominal`, `normal`, `alert`, `warn`, `alarm`, `emergency`) and the attributes include the full Signal K payload fields listed above.
@@ -76,7 +91,7 @@ alias: Signal K Anchor Alarm
 description: ""
 mode: single
 triggers:
-  - event_type: signalk_ha_notification
+  - event_type: signalk_ona_notification
     event_data:
       path: notifications.navigation.anchor
     trigger: event

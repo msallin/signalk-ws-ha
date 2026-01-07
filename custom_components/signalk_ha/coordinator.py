@@ -39,7 +39,7 @@ from .const import (
     DEFAULT_GROUPS,
     DEFAULT_POLICY,
     DEFAULT_REFRESH_INTERVAL_HOURS,
-    EVENT_SIGNAL_K_NOTIFICATION,
+    notification_event_type,
 )
 from .discovery import DiscoveryResult, MetadataConflict, discover_entities
 from .identity import resolve_vessel_identity
@@ -661,7 +661,8 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 listener(dict(event_data))
             except Exception:  # pragma: no cover - defensive
                 _LOGGER.exception("Signal K notification listener failed")
-        self.hass.bus.async_fire(EVENT_SIGNAL_K_NOTIFICATION, event_data)
+        event_type = notification_event_type(cfg.vessel_name)
+        self.hass.bus.async_fire(event_type, event_data)
 
     @staticmethod
     def _notification_signature(

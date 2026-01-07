@@ -24,7 +24,7 @@ from custom_components.signalk_ha.const import (
     CONF_VESSEL_NAME,
     CONF_WS_URL,
     DOMAIN,
-    EVENT_SIGNAL_K_NOTIFICATION,
+    notification_event_type,
 )
 from custom_components.signalk_ha.coordinator import (
     ConnectionState,
@@ -268,7 +268,10 @@ def test_handle_message_fires_notification_event(hass) -> None:
     entry.add_to_hass(hass)
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     events: list = []
-    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+    hass.bus.async_listen(
+        notification_event_type(entry.data[CONF_VESSEL_NAME]),
+        lambda event: events.append(event),
+    )
 
     payload = json.dumps(
         {
@@ -314,7 +317,10 @@ def test_handle_message_notifications_disabled_no_event(hass) -> None:
     entry.add_to_hass(hass)
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     events: list = []
-    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+    hass.bus.async_listen(
+        notification_event_type(entry.data[CONF_VESSEL_NAME]),
+        lambda event: events.append(event),
+    )
 
     payload = json.dumps(
         {
@@ -344,7 +350,10 @@ def test_fire_notification_skips_invalid_path(hass) -> None:
     entry.add_to_hass(hass)
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     events: list = []
-    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+    hass.bus.async_listen(
+        notification_event_type(entry.data[CONF_VESSEL_NAME]),
+        lambda event: events.append(event),
+    )
 
     coordinator._fire_notification(
         {"path": "navigation.speed", "value": {"state": "alert"}}, coordinator.config
@@ -358,7 +367,10 @@ def test_fire_notification_dedupes_without_timestamp(hass) -> None:
     entry.add_to_hass(hass)
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     events: list = []
-    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+    hass.bus.async_listen(
+        notification_event_type(entry.data[CONF_VESSEL_NAME]),
+        lambda event: events.append(event),
+    )
 
     value = {"state": "alert"}
     notification = {
@@ -379,7 +391,10 @@ def test_fire_notification_dedupes_with_timestamp(hass) -> None:
     entry.add_to_hass(hass)
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     events: list = []
-    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+    hass.bus.async_listen(
+        notification_event_type(entry.data[CONF_VESSEL_NAME]),
+        lambda event: events.append(event),
+    )
 
     notification = {
         "path": "notifications.navigation.anchor",
@@ -399,7 +414,10 @@ def test_fire_notification_defaults_message(hass) -> None:
     entry.add_to_hass(hass)
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
     events: list = []
-    hass.bus.async_listen(EVENT_SIGNAL_K_NOTIFICATION, lambda event: events.append(event))
+    hass.bus.async_listen(
+        notification_event_type(entry.data[CONF_VESSEL_NAME]),
+        lambda event: events.append(event),
+    )
 
     notification = {
         "path": "notifications.navigation.anchor",
