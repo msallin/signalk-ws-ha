@@ -288,7 +288,7 @@ class SignalKSensor(SignalKBaseSensor):
             "path": self._spec.path,
             "last_seen": last_seen,
             "spec_known": self._spec.spec_known,
-            "subscription_period_ms": self._spec.period_ms,
+            "subscription_period_seconds": self._spec.period_ms / 1000.0,
             "min_update_seconds": self._min_update_seconds(),
             "stale_seconds": DEFAULT_STALE_SECONDS,
         }

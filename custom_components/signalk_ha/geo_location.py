@@ -132,7 +132,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         data = super().state_attributes
         data["path"] = SK_PATH_POSITION
         data["spec_known"] = self._spec_known
-        data["subscription_period_ms"] = DEFAULT_PERIOD_MS
+        data["subscription_period_seconds"] = DEFAULT_PERIOD_MS / 1000.0
         data["min_update_ms"] = DEFAULT_MIN_UPDATE_MS
         data["stale_seconds"] = DEFAULT_STALE_SECONDS
         data["tolerance"] = DEFAULT_POSITION_TOLERANCE_DEG
