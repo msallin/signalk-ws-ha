@@ -80,15 +80,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             host, port_override, scheme_override = normalize_host_input(host)
             port = port_override or user_input[CONF_PORT]
             use_ssl = user_input[CONF_SSL]
+            verify_ssl = not user_input[CONF_VERIFY_SSL]
             if scheme_override in ("http", "https"):
                 use_ssl = scheme_override == "https"
 
             server_url = normalize_server_url(host, port, use_ssl)
 
             try:
-                discovery = await self._async_discover_server(
-                    server_url, user_input[CONF_VERIFY_SSL]
-                )
+                discovery = await self._async_discover_server(server_url, verify_ssl)
             except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError, ssl.SSLError):
                 errors["base"] = "cannot_connect"
             except AuthRequired:
@@ -100,13 +99,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ws_url = discovery.ws_url
                 try:
                     vessel_data = await self._async_validate_connection(
-                        base_url, user_input[CONF_VERIFY_SSL]
+                        base_url, verify_ssl
                     )
                 except AuthRequired:
                     try:
                         access_request = await self._async_start_access_request(
                             base_url,
-                            user_input[CONF_VERIFY_SSL],
+                            verify_ssl,
                             host=host,
                             port=port,
                         )
@@ -122,7 +121,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_HOST: host,
                             CONF_PORT: port,
                             CONF_SSL: use_ssl,
-                            CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
+                            CONF_VERIFY_SSL: verify_ssl,
                             CONF_BASE_URL: base_url,
                             CONF_WS_URL: ws_url,
                             CONF_SERVER_ID: discovery.server_id,
@@ -148,7 +147,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         host=host,
                         port=port,
                         use_ssl=use_ssl,
-                        verify_ssl=user_input[CONF_VERIFY_SSL],
+                        verify_ssl=verify_ssl,
                         base_url=base_url,
                         ws_url=ws_url,
                         vessel_data=vessel_data,
@@ -164,7 +163,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_HOST): cv.string,
                 vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
                 vol.Optional(CONF_SSL, default=DEFAULT_SSL): cv.boolean,
-                vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): cv.boolean,
+                vol.Optional(CONF_VERIFY_SSL, default=not DEFAULT_VERIFY_SSL): cv.boolean,
                 vol.Optional(CONF_GROUPS, default=list(DEFAULT_GROUPS)): cv.multi_select(
                     group_options
                 ),

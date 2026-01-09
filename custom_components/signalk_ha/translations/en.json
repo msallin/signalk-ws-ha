@@ -8,7 +8,7 @@
           "host": "Host",
           "port": "Port",
           "ssl": "Use TLS (https/wss)",
-          "verify_ssl": "Verify TLS certificate (disable for self-signed)",
+          "verify_ssl": "Ignore certificate errors",
           "groups": "Data groups to include"
         }
       },

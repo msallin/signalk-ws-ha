@@ -27,9 +27,10 @@ If you prefer to install manually:
 
 1. Open Settings > Devices & Services > Add Integration > Signal K.
 2. Enter parameters (see Setup parameters below).
-3. If the Signal K server requires authentication, Home Assistant creates an access request. Approve it in the Signal K admin UI (Security > Access Requests); Home Assistant continues automatically after approval.
-4. The integration fetches vessel data and creates entities (all disabled by default).
-5. Enable the entities you want in the entity registry and wait for updates.
+3. Enable notifications and configure notification paths used for Event entities.
+4. If the Signal K server requires authentication, Home Assistant creates an access request. Approve it in the Signal K admin UI (Security > Access Requests); Home Assistant continues automatically after approval.
+5. The integration fetches vessel data and creates entities (all disabled by default).
+6. Enable the entities you want in the entity registry and wait for updates.
 
 ### Setup parameters
 
@@ -38,7 +39,7 @@ If you prefer to install manually:
 | Host | Hostname or URL (http/https). If you include a scheme, TLS and port are inferred. | Required |
 | Port | Signal K port. | 3000 |
 | Use TLS (https/wss) | Enable if your Signal K uses HTTPS/WSS. | Off |
-| Verify TLS certificate | Disable for self-signed certificates. | On |
+| Ignore certificate errors | Allow self-signed certificates. | Off |
 
 ### Options
 
@@ -46,8 +47,8 @@ If you prefer to install manually:
 | --- | --- | --- |
 | Data groups to include | Which Signal K groups are discovered (navigation, environment, tanks, etc.). | Navigation, Environment, Tanks |
 | Discovery refresh interval (hours) | How often REST discovery refreshes entity metadata. | 24 |
-| Enable Signal K notification events | Emit `signalk_<vesselname>_notification` events for `notifications.*` (vessel name slugified). | On |
-| Notification paths for Event entities | One `notifications.*` path per line to expose as Event entities. Use `notifications.*` to expose all. | None |
+| Enable Signal K notifications | Subscribe to all `notifications.*` updates and publish them on the HA event bus. | On |
+| Notification paths | One `notifications.*` path per line to expose. Use `notifications.*` to expose all. | `notifications.*` |
 
 ## How it works
 
@@ -69,7 +70,7 @@ Units and icons are suggested when metadata is available, and names are made hum
 ### Subscriptions
 
 WebSocket subscriptions use the discovered stream endpoint and resubscribe after reconnects.
-Only enabled entity paths are subscribed using `format=delta` and `policy=ideal`, and `notifications.*` is added when notification events are enabled.
+Only enabled entity paths are subscribed using `format=delta` and `policy=ideal`. If notifications are enabled, the integration also subscribes to `notifications.*` so alerts stay reliable.
 Per‑path periods are applied when available so high‑rate signals don’t overwhelm Home Assistant.
 
 ### Updates
@@ -84,7 +85,7 @@ The churn‑reduction pipeline has multiple layers that work together:
 
 ### Notifications
 
-Signal K notifications (`notifications.*`) are forwarded as Home Assistant events when enabled in Options. The event type is `signalk_<vesselname>_notification`. Notifications are also exposed as Event entities (domain `event`) so you can build automations in the UI. Each unique notification path creates an Event entity.
+When notifications are enabled, Signal K notifications (`notifications.*`) are forwarded as Home Assistant events. The event type is `signalk_<vesselname>_notification`. Notifications are also exposed as Event entities (domain `event`) so you can build automations in the UI. The Notification Paths option controls which Event entities are created.
 
 The Home Assistant event payload includes:
 

@@ -410,7 +410,7 @@ def test_fire_notification_dedupes_with_timestamp(hass) -> None:
     assert len(events) == 1
 
 
-def test_fire_notification_defaults_message(hass) -> None:
+async def test_fire_notification_defaults_message(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
@@ -426,6 +426,7 @@ def test_fire_notification_defaults_message(hass) -> None:
     }
 
     coordinator._fire_notification(notification, coordinator.config)
+    await hass.async_block_till_done()
 
     assert events
     assert events[0].data["message"] == "notifications.navigation.anchor (alert)"
