@@ -30,6 +30,8 @@ async def async_setup_entry(
     if runtime is None:
         return
     coordinator: SignalKCoordinator = runtime.coordinator
+    if not coordinator.notifications_enabled:
+        return
     allowed_paths = normalize_notification_paths(
         entry.options.get(CONF_NOTIFICATION_PATHS, DEFAULT_NOTIFICATION_PATHS)
     )
@@ -86,6 +88,8 @@ class SignalKNotificationEvent(CoordinatorEntity, EventEntity):
 
     @callback
     def handle_notification(self, event_data: dict[str, Any]) -> None:
+        if not self.coordinator.notifications_enabled:
+            return
         if event_data.get("path") != self._path:
             return
         event_type = _notification_event_type(event_data.get("state"))
@@ -117,8 +121,6 @@ class _SignalKNotificationListener:
 
     @callback
     def handle_notification(self, event_data: dict[str, Any]) -> None:
-        if not self._coordinator.notifications_enabled:
-            return
         path = event_data.get("path")
         if not isinstance(path, str) or not path.startswith("notifications."):
             return

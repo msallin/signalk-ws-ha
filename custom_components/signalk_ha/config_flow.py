@@ -67,6 +67,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._pending_data: dict[str, Any] | None = None
+        self._pending_access_token: str | None = None
+        self._pending_vessel_data: dict[str, Any] | None = None
         self._access_request: AccessRequestInfo | None = None
         self._reauth_entry: config_entries.ConfigEntry | None = None
         self._auth_task: asyncio.Task[tuple[str, dict[str, Any]]] | None = None
@@ -142,7 +144,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_response"
                 else:
                     groups = _normalize_groups(user_input.get(CONF_GROUPS))
-                    return await self._async_finish_setup(
+                    return await self._async_start_notifications_step(
                         host=host,
                         port=port,
                         use_ssl=use_ssl,
@@ -229,7 +231,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "invalid_response"
         else:
             self._auth_task = None
-            return await self._async_finish_setup(
+            if self._reauth_entry is not None:
+                return await self._async_finish_setup(
+                    host=self._pending_data[CONF_HOST],
+                    port=self._pending_data[CONF_PORT],
+                    use_ssl=self._pending_data[CONF_SSL],
+                    verify_ssl=self._pending_data[CONF_VERIFY_SSL],
+                    base_url=self._pending_data[CONF_BASE_URL],
+                    ws_url=self._pending_data[CONF_WS_URL],
+                    vessel_data=vessel_data,
+                    access_token=token,
+                    groups=_normalize_groups(self._pending_data.get(CONF_GROUPS)),
+                    server_id=self._pending_data.get(CONF_SERVER_ID),
+                    server_version=self._pending_data.get(CONF_SERVER_VERSION),
+                )
+            return await self._async_start_notifications_step(
                 host=self._pending_data[CONF_HOST],
                 port=self._pending_data[CONF_PORT],
                 use_ssl=self._pending_data[CONF_SSL],
@@ -245,6 +261,49 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._auth_task = None
         return self._show_auth_form(errors=errors)
+
+    async def async_step_notifications(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        if not self._pending_data or self._pending_vessel_data is None:
+            return self.async_abort(reason="auth_cancelled")
+
+        if user_input is not None:
+            options = {
+                CONF_ENABLE_NOTIFICATIONS: bool(
+                    user_input.get(CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS)
+                ),
+                CONF_NOTIFICATION_PATHS: normalize_notification_paths(
+                    user_input.get(CONF_NOTIFICATION_PATHS)
+                )
+            }
+            return await self._async_finish_setup(
+                host=self._pending_data[CONF_HOST],
+                port=self._pending_data[CONF_PORT],
+                use_ssl=self._pending_data[CONF_SSL],
+                verify_ssl=self._pending_data[CONF_VERIFY_SSL],
+                base_url=self._pending_data[CONF_BASE_URL],
+                ws_url=self._pending_data[CONF_WS_URL],
+                vessel_data=self._pending_vessel_data,
+                access_token=self._pending_access_token,
+                groups=_normalize_groups(self._pending_data.get(CONF_GROUPS)),
+                server_id=self._pending_data.get(CONF_SERVER_ID),
+                server_version=self._pending_data.get(CONF_SERVER_VERSION),
+                notification_options=options,
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_ENABLE_NOTIFICATIONS, default=DEFAULT_ENABLE_NOTIFICATIONS
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_NOTIFICATION_PATHS,
+                    default=paths_to_text(DEFAULT_NOTIFICATION_PATHS),
+                ): cv.string,
+            }
+        )
+        return self.async_show_form(step_id="notifications", data_schema=schema)
 
     async def async_step_reauth(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         entry_id = self.context.get("entry_id")
@@ -302,6 +361,36 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             client_id=client_id,
         )
 
+    async def _async_start_notifications_step(
+        self,
+        *,
+        host: str,
+        port: int,
+        use_ssl: bool,
+        verify_ssl: bool,
+        base_url: str,
+        ws_url: str,
+        vessel_data: dict[str, Any],
+        access_token: str | None,
+        groups: list[str],
+        server_id: str | None,
+        server_version: str | None,
+    ) -> FlowResult:
+        self._pending_data = {
+            CONF_HOST: host,
+            CONF_PORT: port,
+            CONF_SSL: use_ssl,
+            CONF_VERIFY_SSL: verify_ssl,
+            CONF_BASE_URL: base_url,
+            CONF_WS_URL: ws_url,
+            CONF_GROUPS: groups,
+            CONF_SERVER_ID: server_id,
+            CONF_SERVER_VERSION: server_version,
+        }
+        self._pending_vessel_data = vessel_data
+        self._pending_access_token = access_token
+        return await self.async_step_notifications()
+
     async def _async_finish_setup(
         self,
         *,
@@ -316,6 +405,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         groups: list[str],
         server_id: str | None,
         server_version: str | None,
+        notification_options: dict[str, Any] | None = None,
     ) -> FlowResult:
         identity = resolve_vessel_identity(vessel_data, base_url)
         instance_id = build_instance_id(base_url, identity.vessel_id)
@@ -348,7 +438,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.hass.config_entries.async_update_entry(self._reauth_entry, data=data)
             return self.async_abort(reason="reauth_successful")
 
-        return self.async_create_entry(title=f"Signal K ({identity.vessel_name})", data=data)
+        return self.async_create_entry(
+            title=f"Signal K ({identity.vessel_name})",
+            data=data,
+            options=notification_options or {},
+        )
 
     async def _async_poll_and_fetch(self) -> tuple[str, dict[str, Any]]:
         assert self._pending_data is not None
@@ -415,11 +509,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             CONF_REFRESH_INTERVAL_HOURS,
             self._entry.data.get(CONF_REFRESH_INTERVAL_HOURS, DEFAULT_REFRESH_INTERVAL_HOURS),
         )
+        current_notifications_enabled = self._entry.options.get(
+            CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS
+        )
         current_groups = _normalize_groups(
             self._entry.options.get(CONF_GROUPS, self._entry.data.get(CONF_GROUPS))
-        )
-        current_notifications = self._entry.options.get(
-            CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS
         )
         current_notification_paths = paths_to_text(
             self._entry.options.get(CONF_NOTIFICATION_PATHS, DEFAULT_NOTIFICATION_PATHS)
@@ -428,7 +522,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Optional(CONF_REFRESH_INTERVAL_HOURS, default=current): vol.Coerce(int),
-                vol.Optional(CONF_ENABLE_NOTIFICATIONS, default=current_notifications): cv.boolean,
+                vol.Optional(
+                    CONF_ENABLE_NOTIFICATIONS, default=current_notifications_enabled
+                ): cv.boolean,
                 vol.Optional(
                     CONF_NOTIFICATION_PATHS, default=current_notification_paths
                 ): cv.string,
@@ -448,13 +544,17 @@ def _admin_access_url(base_url: str) -> str | None:
 
 
 def _group_options() -> dict[str, str]:
-    return {group: group.replace("_", " ").title() for group in SCHEMA_GROUPS}
+    return {group: group.replace("_", " ").title() for group in _config_groups()}
 
 
 def _normalize_groups(groups: Any | None) -> list[str]:
     if not groups:
         return list(DEFAULT_GROUPS)
     selected = [group for group in groups if isinstance(group, str)]
-    allowed = set(SCHEMA_GROUPS)
+    allowed = set(_config_groups())
     filtered = [group for group in selected if group in allowed]
     return filtered or list(DEFAULT_GROUPS)
+
+
+def _config_groups() -> tuple[str, ...]:
+    return tuple(group for group in SCHEMA_GROUPS if group != "notifications")

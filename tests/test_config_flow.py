@@ -47,6 +47,12 @@ def _discovery_info(
     )
 
 
+NOTIFICATION_STEP_INPUT = {
+    CONF_ENABLE_NOTIFICATIONS: True,
+    CONF_NOTIFICATION_PATHS: "notifications.*",
+}
+
+
 async def test_config_flow_creates_entry(hass, enable_custom_integrations) -> None:
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     assert result["type"] == FlowResultType.FORM
@@ -75,6 +81,13 @@ async def test_config_flow_creates_entry(hass, enable_custom_integrations) -> No
                 CONF_VERIFY_SSL: True,
             },
         )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "notifications"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], NOTIFICATION_STEP_INPUT
+    )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_VESSEL_NAME] == "ONA"
@@ -113,6 +126,13 @@ async def test_config_flow_scheme_override(hass, enable_custom_integrations) -> 
             },
         )
 
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "notifications"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], NOTIFICATION_STEP_INPUT
+    )
+
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SSL] is True
     assert result["data"][CONF_PORT] == 1234
@@ -145,6 +165,10 @@ async def test_config_flow_unique_id_prevents_duplicates(hass, enable_custom_int
                 CONF_VERIFY_SSL: True,
             },
         )
+        assert result["type"] == FlowResultType.FORM
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], NOTIFICATION_STEP_INPUT
+        )
         assert result["type"] == FlowResultType.CREATE_ENTRY
 
         result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
@@ -156,6 +180,10 @@ async def test_config_flow_unique_id_prevents_duplicates(hass, enable_custom_int
                 CONF_SSL: False,
                 CONF_VERIFY_SSL: True,
             },
+        )
+        assert result["type"] == FlowResultType.FORM
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], NOTIFICATION_STEP_INPUT
         )
 
     assert result["type"] == FlowResultType.ABORT
@@ -210,6 +238,13 @@ async def test_config_flow_access_request_requires_auth(hass, enable_custom_inte
 
         await hass.async_block_till_done()
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "notifications"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], NOTIFICATION_STEP_INPUT
+    )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_ACCESS_TOKEN] == "token123"
@@ -1010,13 +1045,13 @@ async def test_options_flow_updates_refresh_interval(hass, enable_custom_integra
         result["flow_id"],
         {
             CONF_REFRESH_INTERVAL_HOURS: 12,
-            CONF_ENABLE_NOTIFICATIONS: False,
+            CONF_ENABLE_NOTIFICATIONS: True,
             CONF_NOTIFICATION_PATHS: "notifications.navigation.anchor\nnavigation.course.arrival",
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_REFRESH_INTERVAL_HOURS] == 12
-    assert entry.options[CONF_ENABLE_NOTIFICATIONS] is False
+    assert entry.options[CONF_ENABLE_NOTIFICATIONS] is True
     assert entry.options[CONF_GROUPS] == list(DEFAULT_GROUPS)
     assert entry.options[CONF_NOTIFICATION_PATHS] == [
         "notifications.navigation.anchor",

@@ -12,6 +12,14 @@
           "groups": "Data groups to include"
         }
       },
+      "notifications": {
+        "title": "Signal K Notifications",
+        "description": "Enable Signal K notifications and choose which paths should create Event entities.",
+        "data": {
+          "enable_notifications": "Enable Signal K notifications",
+          "notification_paths": "Notification paths (one per line, defaults to notifications.*)"
+        }
+      },
       "auth": {
         "title": "Signal K Authorization",
         "description": "This Signal K server requires approval. Open {approval_url} (or the Signal K admin UI) and approve the access request. Home Assistant continues automatically once approved."
@@ -43,8 +51,8 @@
       "init": {
         "data": {
           "refresh_interval_hours": "Discovery refresh interval (hours)",
-          "enable_notifications": "Enable Signal K notification events",
-          "notification_paths": "Notification paths for Event entities (one per line)",
+          "enable_notifications": "Enable Signal K notifications",
+          "notification_paths": "Notification paths (one per line, defaults to notifications.*)",
           "groups": "Data groups to include"
         }
       }

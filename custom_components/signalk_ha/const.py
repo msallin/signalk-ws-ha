@@ -24,7 +24,7 @@ DEFAULT_SSL = False
 DEFAULT_VERIFY_SSL = True
 DEFAULT_REFRESH_INTERVAL_HOURS = 24
 DEFAULT_ENABLE_NOTIFICATIONS = True
-DEFAULT_NOTIFICATION_PATHS: tuple[str, ...] = ()
+DEFAULT_NOTIFICATION_PATHS: tuple[str, ...] = ("notifications.*",)
 DEFAULT_GROUPS = ("navigation", "environment", "tanks")
 
 DEFAULT_PERIOD_MS = 5000

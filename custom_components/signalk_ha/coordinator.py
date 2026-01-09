@@ -295,6 +295,12 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self._auth.token_present
 
     @property
+    def notifications_enabled(self) -> bool:
+        return bool(
+            self._entry.options.get(CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS)
+        )
+
+    @property
     def notification_count(self) -> int:
         return self._notification_count
 
@@ -329,10 +335,6 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if elapsed <= 0:
             return None
         return round(self._notification_count / (elapsed / 3600.0), 2)
-
-    @property
-    def notifications_enabled(self) -> bool:
-        return self._notifications_enabled()
 
     def async_add_notification_listener(
         self, listener: Callable[[dict[str, Any]], None]
@@ -522,7 +524,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         notifications = extract_notifications(obj, contexts)
         if notifications:
             # Keep notifications out of the sensor cache; they have their own event pipeline.
-            if self._notifications_enabled():
+            if self.notifications_enabled:
                 for notification in notifications:
                     self._fire_notification(notification, cfg)
             for notification in notifications:
@@ -613,9 +615,6 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 contexts.append(vessel_id)
         return contexts
 
-    def _notifications_enabled(self) -> bool:
-        return self._entry.options.get(CONF_ENABLE_NOTIFICATIONS, DEFAULT_ENABLE_NOTIFICATIONS)
-
     def _fire_notification(self, notification: dict[str, Any], cfg: SignalKConfig) -> None:
         path = notification.get("path")
         if not isinstance(path, str) or not path.startswith("notifications."):
@@ -675,13 +674,14 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._notification_count += 1
         self._last_notification = event_data
         _LOGGER.debug("Signal K notification: %s", event_data)
-        for listener in list(self._notification_listeners):
-            try:
-                listener(dict(event_data))
-            except Exception:  # pragma: no cover - defensive
-                _LOGGER.exception("Signal K notification listener failed")
-        event_type = notification_event_type(cfg.vessel_name)
-        self.hass.bus.async_fire(event_type, event_data)
+        if self.notifications_enabled:
+            for listener in list(self._notification_listeners):
+                try:
+                    listener(dict(event_data))
+                except Exception:  # pragma: no cover - defensive
+                    _LOGGER.exception("Signal K notification listener failed")
+            event_type = notification_event_type(cfg.vessel_name)
+            self.hass.bus.async_fire(event_type, event_data)
 
     @staticmethod
     def _notification_signature(
