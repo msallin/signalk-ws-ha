@@ -51,8 +51,8 @@
       "init": {
         "data": {
           "refresh_interval_hours": "Discovery refresh interval (hours)",
-          "enable_notifications": "Enable Signal K notifications",
-          "notification_paths": "Notification paths (one per line, defaults to notifications.*)",
+          "enable_notifications": "Enable notifications",
+          "notification_paths": "Notification paths to create event entities for (one per line, empty to disable)",
           "groups": "Data groups to include"
         }
       }
