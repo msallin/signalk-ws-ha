@@ -14,10 +14,10 @@
       },
       "notifications": {
         "title": "Signal K Notifications",
-        "description": "Enable Signal K notifications and choose which paths should create Event entities.",
+        "description": "Enable notifications and choose which paths should create Event entities. All notifications are sent to Home Assistant as events.",
         "data": {
-          "enable_notifications": "Enable Signal K notifications",
-          "notification_paths": "Notification paths (one per line, defaults to notifications.*)"
+          "enable_notifications": "Enable notifications",
+          "notification_paths": "Notification paths to create event entities for (one per line, empty to disable)"
         }
       },
       "auth": {
