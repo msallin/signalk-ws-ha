@@ -290,6 +290,33 @@ async def test_update_subscriptions_uses_registry_and_periods(hass) -> None:
     }
 
 
+async def test_update_subscriptions_disable_notifications(hass) -> None:
+    entry = _make_entry(options={CONF_ENABLE_NOTIFICATIONS: False})
+    entry.add_to_hass(hass)
+
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"signalk:{entry.entry_id}:navigation.speedOverGround",
+        suggested_object_id="speed_over_ground",
+        config_entry=entry,
+    ).entity_id
+
+    coordinator = AsyncMock()
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=SimpleNamespace(data=None),
+        auth=AsyncMock(),
+    )
+
+    await _async_update_subscriptions(hass, entry)
+
+    paths, periods = coordinator.async_update_paths.call_args.args
+    assert paths == ["navigation.speedOverGround"]
+    assert SK_PATH_NOTIFICATIONS not in periods
+
+
 def test_path_from_unique_id() -> None:
     assert path_from_unique_id(None) is None
     assert path_from_unique_id("invalid") is None
@@ -420,33 +447,6 @@ async def test_update_subscriptions_no_runtime(hass) -> None:
     entry.runtime_data = None
 
     await _async_update_subscriptions(hass, entry)
-
-
-async def test_update_subscriptions_disable_notifications(hass) -> None:
-    entry = _make_entry(options={CONF_ENABLE_NOTIFICATIONS: False})
-    entry.add_to_hass(hass)
-
-    registry = er.async_get(hass)
-    registry.async_get_or_create(
-        "sensor",
-        DOMAIN,
-        f"signalk:{entry.entry_id}:navigation.speedOverGround",
-        suggested_object_id="speed_over_ground",
-        config_entry=entry,
-    ).entity_id
-
-    coordinator = AsyncMock()
-    entry.runtime_data = SignalKRuntimeData(
-        coordinator=coordinator,
-        discovery=SimpleNamespace(data=None),
-        auth=AsyncMock(),
-    )
-
-    await _async_update_subscriptions(hass, entry)
-
-    paths, periods = coordinator.async_update_paths.call_args.args
-    assert paths == ["navigation.speedOverGround"]
-    assert SK_PATH_NOTIFICATIONS not in periods
 
 
 async def test_update_subscriptions_skips_event_entities(hass) -> None:

@@ -87,7 +87,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=None,
         expected_units=("m",),
-        tolerance=0.05,
+        tolerance=0.5,
     ),
     "environment.depth.belowSurface": PathMapping(
         unit="m",
@@ -95,7 +95,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=None,
         expected_units=("m",),
-        tolerance=0.05,
+        tolerance=0.5,
     ),
     "environment.depth.belowKeel": PathMapping(
         unit="m",
@@ -103,7 +103,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=None,
         expected_units=("m",),
-        tolerance=0.05,
+        tolerance=0.5,
     ),
     "environment.wind.speedApparent": PathMapping(
         unit="kn",
