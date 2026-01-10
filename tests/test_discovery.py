@@ -244,9 +244,7 @@ def test_discovery_icon_defaults() -> None:
     data = {
         "electrical": {"batteries": {"0": {"voltage": {"value": 12.4}}}},
         "tanks": {"fuel": {"0": {"currentLevel": {"value": 0.5}}}},
-        "environment": {
-            "outside": {"temperature": {"value": 300.0, "meta": {"units": "K"}}}
-        },
+        "environment": {"outside": {"temperature": {"value": 300.0, "meta": {"units": "K"}}}},
     }
     result = discover_entities(data, scopes=("electrical", "tanks", "environment"))
     icons = {entity.path: entity.icon for entity in result.entities}

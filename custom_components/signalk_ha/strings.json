@@ -43,7 +43,8 @@
       "auth_not_supported": "Authentication is required but access requests are not supported.",
       "reauth_successful": "Authentication updated.",
       "auth_cancelled": "Authentication was cancelled.",
-      "cannot_connect": "Failed to connect. Check host, port, and TLS."
+      "cannot_connect": "Failed to connect. Check host, port, and TLS.",
+      "zeroconf_unsupported": "This Signal K discovery record is not supported."
     }
   },
   "options": {

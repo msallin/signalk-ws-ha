@@ -26,6 +26,7 @@ If you prefer to install manually:
 ## Configuration
 
 1. Open Settings > Devices & Services > Add Integration > Signal K.
+   - If Signal K is discovered via mDNS/zeroconf, Home Assistant will offer a pre-filled setup flow (`_signalk-http` and `_signalk-https`).
 2. Enter parameters (see Setup parameters below).
 3. Enable notifications and configure notification paths used for Event entities.
 4. If the Signal K server requires authentication, Home Assistant creates an access request. Approve it in the Signal K admin UI (Security > Access Requests); Home Assistant continues automatically after approval.
@@ -56,9 +57,9 @@ Signal K is broad and high‑rate, so the integration intentionally separates di
 
 ### Discovery
 
-Discovery starts with the Signal K server discovery document (`GET /signalk`) to resolve the REST and WebSocket endpoints, then fetches `/signalk/v1/api/vessels/self` to build the entity catalog for the selected data groups.
+Discovery starts with mDNS/zeroconf (HTTP/HTTPS records only), then uses the Signal K server discovery document (`GET /signalk`) to resolve the REST and WebSocket endpoints, and finally fetches `/signalk/v1/api/vessels/self` to build the entity catalog for the selected data groups.
 REST discovery runs on startup and every 24 hours (configurable in Options); missing paths are marked unavailable with `last_seen`, and entities are never deleted automatically.
-Discovery is idempotent: re‑runs can add new entities or refresh metadata without breaking existing entity IDs.
+Discovery is idempotent: re-runs can add new entities or refresh metadata without breaking existing entity IDs.
 
 ### Entity creation
 
@@ -133,7 +134,7 @@ Diagnostic sensors summarize connection health and message flow (disabled by def
 ## Troubleshooting
 
 - Verify the REST URL is reachable in a browser or `curl`.
-- If you use a self-signed certificate, disable "Verify TLS certificate".
+- If you use a self-signed certificate, enable "Ignore certificate errors".
 - If authentication is required, approve the access request in Signal K and wait for Home Assistant to continue automatically.
 - If approval times out, reopen the config flow to retry the access request.
 - Use the Diagnostics panel for connection state, counters, and last update timestamps.

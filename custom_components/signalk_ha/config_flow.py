@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import ssl
-from typing import Any
+from ipaddress import ip_address
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
 
 import homeassistant.helpers.config_validation as cv
@@ -13,6 +14,9 @@ from aiohttp import ClientConnectorError, ClientError
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+if TYPE_CHECKING:
+    from homeassistant.components.zeroconf import ZeroconfServiceInfo
 
 from .auth import (
     AccessRequestInfo,
@@ -72,6 +76,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._access_request: AccessRequestInfo | None = None
         self._reauth_entry: config_entries.ConfigEntry | None = None
         self._auth_task: asyncio.Task[tuple[str, dict[str, Any]]] | None = None
+        self._zeroconf_defaults: dict[str, Any] | None = None
+        self._allow_ssl_fallback = False
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
@@ -87,7 +93,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             server_url = normalize_server_url(host, port, use_ssl)
 
             try:
-                discovery = await self._async_discover_server(server_url, verify_ssl)
+                discovery, verify_ssl = await self._async_call_with_ssl_fallback(
+                    self._async_discover_server,
+                    server_url,
+                    verify_ssl=verify_ssl,
+                )
             except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError, ssl.SSLError):
                 errors["base"] = "cannot_connect"
             except AuthRequired:
@@ -98,16 +108,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 base_url = discovery.base_url
                 ws_url = discovery.ws_url
                 try:
-                    vessel_data = await self._async_validate_connection(
-                        base_url, verify_ssl
+                    vessel_data, verify_ssl = await self._async_call_with_ssl_fallback(
+                        self._async_validate_connection,
+                        base_url,
+                        verify_ssl=verify_ssl,
                     )
                 except AuthRequired:
                     try:
-                        access_request = await self._async_start_access_request(
+                        access_request, verify_ssl = await self._async_call_with_ssl_fallback(
+                            self._async_start_access_request,
                             base_url,
-                            verify_ssl,
                             host=host,
                             port=port,
+                            verify_ssl=verify_ssl,
                         )
                     except AccessRequestUnsupported:
                         errors["base"] = "auth_not_supported"
@@ -157,23 +170,45 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         server_version=discovery.server_version,
                     )
 
+        defaults = self._zeroconf_defaults or {}
         group_options = _group_options()
         schema = vol.Schema(
             {
-                vol.Required(CONF_HOST): cv.string,
-                vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
-                vol.Optional(CONF_SSL, default=DEFAULT_SSL): cv.boolean,
-                vol.Optional(CONF_VERIFY_SSL, default=not DEFAULT_VERIFY_SSL): cv.boolean,
-                vol.Optional(CONF_GROUPS, default=list(DEFAULT_GROUPS)): cv.multi_select(
-                    group_options
-                ),
+                vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): cv.string,
+                vol.Optional(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): cv.port,
+                vol.Optional(CONF_SSL, default=defaults.get(CONF_SSL, DEFAULT_SSL)): cv.boolean,
+                vol.Optional(
+                    CONF_VERIFY_SSL,
+                    default=defaults.get(CONF_VERIFY_SSL, not DEFAULT_VERIFY_SSL),
+                ): cv.boolean,
+                vol.Optional(
+                    CONF_GROUPS,
+                    default=defaults.get(CONF_GROUPS, list(DEFAULT_GROUPS)),
+                ): cv.multi_select(group_options),
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
-    async def _async_discover_server(
-        self, server_url: str, verify_ssl: bool
-    ) -> DiscoveryInfo:
+    async def async_step_zeroconf(self, discovery_info: "ZeroconfServiceInfo") -> FlowResult:
+        host = _zeroconf_host(discovery_info)
+        port = _zeroconf_attr(discovery_info, "port", DEFAULT_PORT) or DEFAULT_PORT
+        service_type = _zeroconf_attr(discovery_info, "type", "") or ""
+        if not _zeroconf_supported_service(service_type):
+            return self.async_abort(reason="zeroconf_unsupported")
+        use_ssl = _zeroconf_use_ssl(service_type)
+
+        self._zeroconf_defaults = {
+            CONF_HOST: host or "",
+            CONF_PORT: port,
+            CONF_SSL: use_ssl,
+            CONF_VERIFY_SSL: not DEFAULT_VERIFY_SSL,
+            CONF_GROUPS: list(DEFAULT_GROUPS),
+        }
+        # Zeroconf is a convenience path; if TLS fails, retry once with verification off.
+        self._allow_ssl_fallback = True
+        return await self.async_step_user()
+
+    async def _async_discover_server(self, server_url: str, verify_ssl: bool) -> DiscoveryInfo:
         session = async_get_clientsession(self.hass)
         return await async_fetch_discovery(session, server_url, verify_ssl)
 
@@ -274,7 +309,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 CONF_NOTIFICATION_PATHS: normalize_notification_paths(
                     user_input.get(CONF_NOTIFICATION_PATHS)
-                )
+                ),
             }
             return await self._async_finish_setup(
                 host=self._pending_data[CONF_HOST],
@@ -359,6 +394,23 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             verify_ssl,
             client_id=client_id,
         )
+
+    async def _async_call_with_ssl_fallback(
+        self,
+        func,
+        *args: Any,
+        verify_ssl: bool,
+        **kwargs: Any,
+    ):
+        try:
+            return await func(*args, verify_ssl, **kwargs), verify_ssl
+        except ssl.SSLError:
+            if not self._allow_ssl_fallback or not verify_ssl:
+                raise
+            result = await func(*args, False, **kwargs)
+            if self._zeroconf_defaults is not None:
+                self._zeroconf_defaults[CONF_VERIFY_SSL] = True
+            return result, False
 
     async def _async_start_notifications_step(
         self,
@@ -557,3 +609,35 @@ def _normalize_groups(groups: Any | None) -> list[str]:
 
 def _config_groups() -> tuple[str, ...]:
     return tuple(group for group in SCHEMA_GROUPS if group != "notifications")
+
+
+def _zeroconf_attr(discovery_info: Any, name: str, default: Any | None = None) -> Any:
+    if isinstance(discovery_info, dict):
+        return discovery_info.get(name, default)
+    return getattr(discovery_info, name, default)
+
+
+def _zeroconf_host(discovery_info: Any) -> str | None:
+    host = _zeroconf_attr(discovery_info, "host")
+    if not host:
+        host = _zeroconf_attr(discovery_info, "hostname")
+    if not host:
+        addresses = _zeroconf_attr(discovery_info, "addresses") or []
+        if addresses:
+            try:
+                host = str(ip_address(addresses[0]))
+            except ValueError:
+                host = None
+    if not host:
+        return None
+    return host.rstrip(".").lower()
+
+
+def _zeroconf_use_ssl(service_type: str) -> bool:
+    service = service_type.lower()
+    return service == "_signalk-https._tcp.local."
+
+
+def _zeroconf_supported_service(service_type: str) -> bool:
+    service = service_type.lower()
+    return service in ("_signalk-http._tcp.local.", "_signalk-https._tcp.local.")

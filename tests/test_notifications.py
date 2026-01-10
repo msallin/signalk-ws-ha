@@ -15,9 +15,7 @@ def test_normalize_notification_paths() -> None:
 
 
 def test_normalize_notification_paths_dedupes() -> None:
-    paths = normalize_notification_paths(
-        ["notifications.navigation.anchor", "navigation.anchor"]
-    )
+    paths = normalize_notification_paths(["notifications.navigation.anchor", "navigation.anchor"])
     assert paths == ["notifications.navigation.anchor"]
 
 
@@ -32,8 +30,7 @@ def test_normalize_notification_paths_skips_non_string_items() -> None:
 
 def test_paths_to_text() -> None:
     assert (
-        paths_to_text(["notifications.navigation.anchor", ""])
-        == "notifications.navigation.anchor"
+        paths_to_text(["notifications.navigation.anchor", ""]) == "notifications.navigation.anchor"
     )
 
 

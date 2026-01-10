@@ -7,5 +7,6 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/msallin/signalk-ha/issues",
   "requirements": [],
-  "version": "0.9.0"
+  "version": "0.9.0",
+  "zeroconf": ["_signalk-http._tcp.local.", "_signalk-https._tcp.local."]
 }

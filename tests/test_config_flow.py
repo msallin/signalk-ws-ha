@@ -1,5 +1,6 @@
 import asyncio
 import ssl
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.data_entry_flow import FlowResultType
@@ -137,6 +138,116 @@ async def test_config_flow_scheme_override(hass, enable_custom_integrations) -> 
     assert result["data"][CONF_SSL] is True
     assert result["data"][CONF_PORT] == 1234
     assert result["data"][CONF_HOST] == "sk.local"
+
+
+async def test_zeroconf_prefills_defaults(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    info = SimpleNamespace(
+        host="sk.local",
+        hostname=None,
+        port=3443,
+        type="_signalk-https._tcp.local.",
+        addresses=[],
+    )
+
+    result = await flow.async_step_zeroconf(info)
+
+    assert result["type"] == FlowResultType.FORM
+    assert flow._zeroconf_defaults[CONF_HOST] == "sk.local"
+    assert flow._zeroconf_defaults[CONF_PORT] == 3443
+    assert flow._zeroconf_defaults[CONF_SSL] is True
+
+
+async def test_zeroconf_ssl_fallback_disables_verify(hass, enable_custom_integrations) -> None:
+    info = SimpleNamespace(
+        host="sk.local",
+        hostname=None,
+        port=3443,
+        type="_signalk-https._tcp.local.",
+        addresses=[],
+    )
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "zeroconf"}, data=info
+    )
+    assert result["type"] == FlowResultType.FORM
+
+    vessel_data = {"name": "ONA", "mmsi": "261006533"}
+    with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(
+                side_effect=[
+                    ssl.SSLError(),
+                    _discovery_info(host="sk.local", port=3443, use_ssl=True),
+                ]
+            ),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
+            new=AsyncMock(return_value=vessel_data),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_get_clientsession",
+            return_value=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_HOST: "sk.local",
+                CONF_PORT: 3443,
+                CONF_SSL: True,
+                CONF_VERIFY_SSL: False,
+            },
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "notifications"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], NOTIFICATION_STEP_INPUT
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_VERIFY_SSL] is False
+
+
+def test_zeroconf_host_uses_hostname() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_host
+
+    info = SimpleNamespace(host=None, hostname="Sk.Local.", addresses=[])
+    assert _zeroconf_host(info) == "sk.local"
+
+
+def test_zeroconf_host_uses_address() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_host
+
+    info = SimpleNamespace(host=None, hostname=None, addresses=[b"\x0a\x00\x00\x01"])
+    assert _zeroconf_host(info) == "10.0.0.1"
+
+
+def test_zeroconf_use_ssl_non_secure() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_use_ssl
+
+    assert _zeroconf_use_ssl("_signalk-http._tcp.local.") is False
+
+
+async def test_zeroconf_ws_service_aborts(hass, enable_custom_integrations) -> None:
+    info = SimpleNamespace(
+        host="sk.local",
+        hostname=None,
+        port=3000,
+        type="_signalk-ws._tcp.local.",
+        addresses=[],
+    )
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "zeroconf"}, data=info
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "zeroconf_unsupported"
 
 
 async def test_config_flow_unique_id_prevents_duplicates(hass, enable_custom_integrations) -> None:
