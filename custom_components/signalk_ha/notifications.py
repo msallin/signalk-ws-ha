@@ -11,7 +11,7 @@ def normalize_notification_paths(value: Any) -> list[str]:
     if isinstance(value, str):
         raw = value.replace(",", "\n").splitlines()
     elif isinstance(value, (list, tuple, set)):
-        raw = [str(item) for item in value]
+        raw = list(value)
     else:
         return []
 

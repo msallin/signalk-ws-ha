@@ -112,9 +112,25 @@ def test_discovery_disambiguated_name_skips_when_prefix_already_present() -> Non
     assert _disambiguated_name("navigation.speedOverGround", name) == name
 
 
+def test_discovery_disambiguated_name_prefix_case_insensitive() -> None:
+    name = "navigation Speed"
+    assert _disambiguated_name("navigation.speedOverGround", name) == name
+
+
+def test_discovery_disambiguated_name_prefix_only() -> None:
+    name = "Navigation"
+    assert _disambiguated_name("navigation.speedOverGround", name) == name
+
+
+def test_discovery_disambiguated_name_prefix_non_generic() -> None:
+    name = "Wind Speed Over Ground"
+    assert _disambiguated_name("environment.wind.speedOverGround", name) == name
+
+
 def test_discovery_prefix_parts_handles_digits() -> None:
     assert _prefix_parts_for_path("tanks.fuel.0.currentLevel") == ["fuel", "0"]
     assert _prefix_parts_for_path("tanks.0.currentLevel") == ["tanks", "0"]
+    assert _prefix_parts_for_path("tanks.fuel.1.2.currentLevel") == ["fuel", "2"]
     assert _prefix_parts_for_path("speed") == []
 
 
