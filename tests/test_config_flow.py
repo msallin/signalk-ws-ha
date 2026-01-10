@@ -145,12 +145,14 @@ async def test_zeroconf_prefills_defaults(hass) -> None:
 
     flow = ConfigFlow()
     flow.hass = hass
+    flow.context = {}
     info = SimpleNamespace(
         host="sk.local",
         hostname=None,
         port=3443,
         type="_signalk-https._tcp.local.",
         addresses=[],
+        properties={b"vname": b"ONA", b"vmmsi": b"261006533"},
     )
 
     result = await flow.async_step_zeroconf(info)
@@ -159,6 +161,30 @@ async def test_zeroconf_prefills_defaults(hass) -> None:
     assert flow._zeroconf_defaults[CONF_HOST] == "sk.local"
     assert flow._zeroconf_defaults[CONF_PORT] == 3443
     assert flow._zeroconf_defaults[CONF_SSL] is True
+    assert flow.context["title_placeholders"]["name"] == "ONA (261006533)"
+
+
+async def test_zeroconf_prefills_self_title(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow.context = {}
+    info = SimpleNamespace(
+        host="sk.local",
+        hostname=None,
+        port=3000,
+        type="_signalk-http._tcp.local.",
+        addresses=[],
+        properties={b"self": b"urn:mrn:signalk:uuid:c0d79334-4e25-4245-8892-54e8ccc8021d"},
+    )
+
+    result = await flow.async_step_zeroconf(info)
+
+    assert result["type"] == FlowResultType.FORM
+    assert (
+        flow.context["title_placeholders"]["name"] == "Vessel c0d79334-4e25-4245-8892-54e8ccc8021d"
+    )
 
 
 async def test_zeroconf_ssl_fallback_disables_verify(hass, enable_custom_integrations) -> None:

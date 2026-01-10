@@ -195,6 +195,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         service_type = _zeroconf_attr(discovery_info, "type", "") or ""
         if not _zeroconf_supported_service(service_type):
             return self.async_abort(reason="zeroconf_unsupported")
+        display_name = _zeroconf_title(discovery_info)
+        if display_name:
+            self.context["title_placeholders"] = {"name": display_name}
         use_ssl = _zeroconf_use_ssl(service_type)
 
         self._zeroconf_defaults = {
@@ -615,6 +618,44 @@ def _zeroconf_attr(discovery_info: Any, name: str, default: Any | None = None) -
     if isinstance(discovery_info, dict):
         return discovery_info.get(name, default)
     return getattr(discovery_info, name, default)
+
+
+def _zeroconf_properties(discovery_info: Any) -> dict[str, str]:
+    props = _zeroconf_attr(discovery_info, "properties") or {}
+    if not isinstance(props, dict):
+        return {}
+    normalized: dict[str, str] = {}
+    for raw_key, raw_value in props.items():
+        key = raw_key.decode("utf-8", "ignore") if isinstance(raw_key, bytes) else str(raw_key)
+        value = (
+            raw_value.decode("utf-8", "ignore")
+            if isinstance(raw_value, bytes)
+            else "" if raw_value is None else str(raw_value)
+        )
+        normalized[key.lower()] = value
+    return normalized
+
+
+def _zeroconf_title(discovery_info: Any) -> str | None:
+    props = _zeroconf_properties(discovery_info)
+    name = props.get("vname") or props.get("name")
+    mmsi = props.get("vmmsi") or props.get("mmsi")
+    if name and mmsi:
+        return f"{name} ({mmsi})"
+    if name:
+        return name
+    self_id = props.get("self")
+    if not self_id:
+        return None
+    normalized = self_id.strip()
+    if normalized.startswith("vessels."):
+        normalized = normalized[len("vessels.") :]
+    digits = "".join(ch for ch in normalized if ch.isdigit())
+    if digits and "mmsi" in normalized.lower():
+        return f"MMSI {digits}"
+    if "uuid:" in normalized:
+        return f"Vessel {normalized.split('uuid:', 1)[1]}"
+    return f"Vessel {normalized}"
 
 
 def _zeroconf_host(discovery_info: Any) -> str | None:
