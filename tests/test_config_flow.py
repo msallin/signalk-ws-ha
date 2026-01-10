@@ -261,6 +261,14 @@ def test_zeroconf_use_ssl_non_secure() -> None:
     assert _zeroconf_use_ssl("_signalk-http._tcp.local.") is False
 
 
+def test_build_client_id_format() -> None:
+    from custom_components.signalk_ha.config_flow import _build_client_id
+
+    with patch("custom_components.signalk_ha.config_flow.secrets.token_hex") as mock_hex:
+        mock_hex.return_value = "444e4b8c945ee7b91eb103df"
+        assert _build_client_id() == "homeassistant_signalk_ha-444e-4b8c-945e-e7b91eb103df"
+
+
 async def test_zeroconf_ws_service_aborts(hass, enable_custom_integrations) -> None:
     info = SimpleNamespace(
         host="sk.local",

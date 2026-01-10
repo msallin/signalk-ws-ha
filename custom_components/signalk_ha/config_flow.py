@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import ssl
 from ipaddress import ip_address
 from typing import TYPE_CHECKING, Any
@@ -390,7 +391,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, base_url: str, verify_ssl: bool, *, host: str, port: int
     ) -> AccessRequestInfo:
         session = async_get_clientsession(self.hass)
-        client_id = f"{DOMAIN}:{host}:{port}"
+        client_id = _build_client_id()
         return await async_create_access_request(
             session,
             base_url,
@@ -612,6 +613,12 @@ def _normalize_groups(groups: Any | None) -> list[str]:
 
 def _config_groups() -> tuple[str, ...]:
     return tuple(group for group in SCHEMA_GROUPS if group != "notifications")
+
+
+def _build_client_id() -> str:
+    token = secrets.token_hex(12)
+    suffix = f"{token[:4]}-{token[4:8]}-{token[8:12]}-{token[12:]}"
+    return f"homeassistant_{DOMAIN}-{suffix}"
 
 
 def _zeroconf_attr(discovery_info: Any, name: str, default: Any | None = None) -> Any:
