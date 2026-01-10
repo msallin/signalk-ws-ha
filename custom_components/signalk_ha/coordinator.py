@@ -17,6 +17,7 @@ from aiohttp import ClientError, ClientSession, ClientTimeout, WSMsgType, WSServ
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -29,6 +30,8 @@ from .const import (
     CONF_HOST,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
+    CONF_SERVER_ID,
+    CONF_SERVER_VERSION,
     CONF_SSL,
     CONF_VERIFY_SSL,
     CONF_VESSEL_ID,
@@ -39,12 +42,19 @@ from .const import (
     DEFAULT_GROUPS,
     DEFAULT_POLICY,
     DEFAULT_REFRESH_INTERVAL_HOURS,
+    DOMAIN,
     notification_event_type,
 )
 from .discovery import DiscoveryResult, MetadataConflict, discover_entities
 from .identity import resolve_vessel_identity
 from .parser import extract_notifications, extract_sources, extract_values
-from .rest import async_fetch_vessel_self, normalize_base_url, normalize_ws_url
+from .rest import (
+    async_fetch_discovery,
+    async_fetch_vessel_self,
+    normalize_base_url,
+    normalize_server_url,
+    normalize_ws_url,
+)
 from .subscription import build_subscribe_payload
 
 _LOGGER = logging.getLogger(__name__)
@@ -122,16 +132,47 @@ class SignalKDiscoveryCoordinator(DataUpdateCoordinator[DiscoveryResult]):
 
     async def _async_update_data(self) -> DiscoveryResult:
         cfg = self._config()
+        updates: dict[str, Any] = {}
+        base_url = cfg.base_url
+        ws_url = cfg.ws_url
+        server_id = self._entry.data.get(CONF_SERVER_ID) or None
+        server_version = self._entry.data.get(CONF_SERVER_VERSION) or None
+
+        try:
+            discovery = await async_fetch_discovery(
+                self._session,
+                normalize_server_url(cfg.host, cfg.port, cfg.ssl),
+                cfg.verify_ssl,
+            )
+        except (AuthRequired, ClientError, OSError, ssl.SSLError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("Signal K discovery refresh failed: %s", err)
+            discovery = None
+
+        if discovery:
+            base_url = discovery.base_url
+            ws_url = discovery.ws_url
+            if base_url != self._entry.data.get(CONF_BASE_URL):
+                updates[CONF_BASE_URL] = base_url
+            if ws_url != self._entry.data.get(CONF_WS_URL):
+                updates[CONF_WS_URL] = ws_url
+            if discovery.server_id and discovery.server_id != self._entry.data.get(CONF_SERVER_ID):
+                updates[CONF_SERVER_ID] = discovery.server_id
+                server_id = discovery.server_id
+            if discovery.server_version and discovery.server_version != self._entry.data.get(
+                CONF_SERVER_VERSION
+            ):
+                updates[CONF_SERVER_VERSION] = discovery.server_version
+                server_version = discovery.server_version
         try:
             vessel = await async_fetch_vessel_self(
-                self._session, cfg.base_url, cfg.verify_ssl, cfg.access_token
+                self._session, base_url, cfg.verify_ssl, cfg.access_token
             )
         except AuthRequired as exc:
             self._auth.mark_failure(str(exc))
             raise ConfigEntryAuthFailed("Signal K authentication required") from exc
         else:
             self._auth.mark_success()
-        identity = resolve_vessel_identity(vessel, cfg.base_url)
+        identity = resolve_vessel_identity(vessel, base_url)
         if identity.vessel_id and identity.vessel_id != cfg.vessel_id:
             _LOGGER.warning(
                 "Signal K vessel identity changed from %s to %s; keeping original",
@@ -139,9 +180,19 @@ class SignalKDiscoveryCoordinator(DataUpdateCoordinator[DiscoveryResult]):
                 identity.vessel_id,
             )
         if identity.vessel_name and identity.vessel_name != cfg.vessel_name:
+            updates[CONF_VESSEL_NAME] = identity.vessel_name
+
+        if updates:
             self.hass.config_entries.async_update_entry(
-                self._entry, data={**self._entry.data, CONF_VESSEL_NAME: identity.vessel_name}
+                self._entry, data={**self._entry.data, **updates}
             )
+
+        self._async_update_device_registry(
+            vessel_name=identity.vessel_name,
+            server_id=server_id,
+            server_version=server_version,
+            configuration_url=base_url,
+        )
 
         groups = self._entry.options.get(
             CONF_GROUPS, self._entry.data.get(CONF_GROUPS, DEFAULT_GROUPS)
@@ -151,6 +202,30 @@ class SignalKDiscoveryCoordinator(DataUpdateCoordinator[DiscoveryResult]):
         self._conflicts = result.conflicts
         self._last_refresh = dt_util.utcnow()
         return result
+
+    def _async_update_device_registry(
+        self,
+        *,
+        vessel_name: str | None,
+        server_id: str | None,
+        server_version: str | None,
+        configuration_url: str | None,
+    ) -> None:
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, self._entry.entry_id)})
+        if not device:
+            return
+        updates: dict[str, str] = {}
+        if vessel_name and device.name != vessel_name:
+            updates["name"] = vessel_name
+        if server_id and device.model != server_id:
+            updates["model"] = server_id
+        if server_version and device.sw_version != server_version:
+            updates["sw_version"] = server_version
+        if configuration_url and device.configuration_url != configuration_url:
+            updates["configuration_url"] = configuration_url
+        if updates:
+            registry.async_update_device(device.id, **updates)
 
     def _config(self) -> SignalKConfig:
         data = self._entry.data

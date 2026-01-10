@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from aiohttp import WSMsgType, WSServerHandshakeError
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -19,6 +20,8 @@ from custom_components.signalk_ha.const import (
     CONF_ENABLE_NOTIFICATIONS,
     CONF_HOST,
     CONF_PORT,
+    CONF_SERVER_ID,
+    CONF_SERVER_VERSION,
     CONF_SSL,
     CONF_VERIFY_SSL,
     CONF_VESSEL_ID,
@@ -34,6 +37,7 @@ from custom_components.signalk_ha.coordinator import (
 )
 from custom_components.signalk_ha.discovery import DiscoveryResult
 from custom_components.signalk_ha.identity import VesselIdentity
+from custom_components.signalk_ha.rest import DiscoveryInfo
 
 
 def _make_entry(*, options: dict[str, Any] | None = None) -> MockConfigEntry:
@@ -817,12 +821,31 @@ async def test_run_backoff_increases_on_retries(hass, monkeypatch) -> None:
 async def test_discovery_coordinator_updates_identity(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="Old Vessel",
+        model="old-server",
+        sw_version="1.0",
+        configuration_url="http://sk.local:3000",
+    )
     session = Mock()
     auth = SignalKAuthManager(None)
     discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
     vessel = {"name": "New Name", "mmsi": "261006533"}
+    discovery_info = DiscoveryInfo(
+        base_url="https://sk.local:3443/signalk/v1/api/",
+        ws_url="wss://sk.local:3443/signalk/v1/stream?subscribe=none",
+        server_id="signalk-server-node",
+        server_version="2.20.0",
+    )
 
     with (
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_discovery",
+            new=AsyncMock(return_value=discovery_info),
+        ),
         patch(
             "custom_components.signalk_ha.coordinator.async_fetch_vessel_self",
             new=AsyncMock(return_value=vessel),
@@ -837,6 +860,18 @@ async def test_discovery_coordinator_updates_identity(hass) -> None:
 
     assert result.entities == []
     update_entry.assert_called_once()
+    updated = update_entry.call_args.kwargs["data"]
+    assert updated[CONF_VESSEL_NAME] == "New Name"
+    assert updated[CONF_BASE_URL] == discovery_info.base_url
+    assert updated[CONF_WS_URL] == discovery_info.ws_url
+    assert updated[CONF_SERVER_ID] == discovery_info.server_id
+    assert updated[CONF_SERVER_VERSION] == discovery_info.server_version
+    device = registry.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    assert device is not None
+    assert device.name == "New Name"
+    assert device.model == "signalk-server-node"
+    assert device.sw_version == "2.20.0"
+    assert device.configuration_url == discovery_info.base_url
     assert discovery.last_refresh is not None
 
 
@@ -850,6 +885,10 @@ async def test_discovery_coordinator_warns_on_identity_change(hass, monkeypatch)
     monkeypatch.setattr("custom_components.signalk_ha.coordinator._LOGGER", logger)
 
     with (
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_discovery",
+            new=AsyncMock(return_value=None),
+        ),
         patch(
             "custom_components.signalk_ha.coordinator.async_fetch_vessel_self",
             new=AsyncMock(return_value={"name": "ONA"}),
@@ -876,9 +915,15 @@ async def test_discovery_coordinator_auth_required(hass) -> None:
     auth = SignalKAuthManager(None)
     discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
 
-    with patch(
-        "custom_components.signalk_ha.coordinator.async_fetch_vessel_self",
-        new=AsyncMock(side_effect=AuthRequired("auth")),
+    with (
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_discovery",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_vessel_self",
+            new=AsyncMock(side_effect=AuthRequired("auth")),
+        ),
     ):
         with pytest.raises(ConfigEntryAuthFailed):
             await discovery._async_update_data()
