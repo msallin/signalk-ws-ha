@@ -14,6 +14,7 @@ class VesselIdentity:
 
 
 def normalize_vessel_name(value: Any) -> str:
+    # Normalize the display name so device registry entries never end up empty.
     name = str(value).strip() if value is not None else ""
     return name or "Unknown Vessel"
 

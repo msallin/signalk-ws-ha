@@ -21,21 +21,25 @@ class DiscoveryInfo:
 
 
 def normalize_base_url(host: str, port: int, use_ssl: bool) -> str:
+    # Normalize into a canonical REST base so comparisons and stored config stay stable.
     scheme = "https" if use_ssl else "http"
     return f"{scheme}://{host}:{port}/signalk/v1/api/"
 
 
 def normalize_ws_url(host: str, port: int, use_ssl: bool) -> str:
+    # Normalize the WS endpoint so we always connect to the same stream path.
     scheme = "wss" if use_ssl else "ws"
     return f"{scheme}://{host}:{port}/signalk/v1/stream?subscribe=none"
 
 
 def normalize_server_url(host: str, port: int, use_ssl: bool) -> str:
+    # Normalize the server origin to avoid mixing host-only and full URL inputs.
     scheme = "https" if use_ssl else "http"
     return f"{scheme}://{host}:{port}"
 
 
 def normalize_host_input(host: str) -> tuple[str, int | None, str | None]:
+    # Accept raw host or full URL input and normalize to a host/port/scheme triple.
     if host.startswith("http://") or host.startswith("https://"):
         parsed = urlsplit(host)
         hostname = (parsed.hostname or "").lower()

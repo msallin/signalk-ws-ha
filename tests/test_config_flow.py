@@ -1,7 +1,7 @@
 import asyncio
 import ssl
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.data_entry_flow import FlowResultType
 
@@ -28,6 +28,7 @@ from custom_components.signalk_ha.const import (
     CONF_VESSEL_ID,
     CONF_VESSEL_NAME,
     DEFAULT_GROUPS,
+    DEFAULT_VERIFY_SSL,
     DOMAIN,
 )
 from custom_components.signalk_ha.rest import DiscoveryInfo, normalize_base_url, normalize_ws_url
@@ -164,6 +165,38 @@ async def test_zeroconf_prefills_defaults(hass) -> None:
     assert flow.context["title_placeholders"]["name"] == "ONA (261006533)"
 
 
+async def test_zeroconf_prefills_from_discovery_payload(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow.context = {}
+    info = {
+        "name": "openplotter._signalk-https._tcp.local.",
+        "type": "_signalk-https._tcp.local.",
+        "port": 443,
+        "properties": {
+            "txtvers": "1",
+            "swname": "signalk-server",
+            "swvers": "2.19.1",
+            "roles": "master, main",
+            "self": "urn:mrn:imo:mmsi:261006533",
+            "vname": "ONA",
+            "vmmsi": "261006533",
+        },
+        "ip_addresses": ["10.10.10.143", "fd6e:abac:e9f4::9d0"],
+    }
+
+    result = await flow.async_step_zeroconf(info)
+
+    assert result["type"] == FlowResultType.FORM
+    assert flow._zeroconf_defaults[CONF_HOST] == "10.10.10.143"
+    assert flow._zeroconf_defaults[CONF_PORT] == 443
+    assert flow._zeroconf_defaults[CONF_SSL] is True
+    assert flow._zeroconf_defaults[CONF_VERIFY_SSL] is (not DEFAULT_VERIFY_SSL)
+    assert flow.context["title_placeholders"]["name"] == "ONA (261006533)"
+
+
 async def test_zeroconf_prefills_self_title(hass) -> None:
     from custom_components.signalk_ha.config_flow import ConfigFlow
 
@@ -289,6 +322,35 @@ async def test_zeroconf_ws_service_aborts(hass, enable_custom_integrations) -> N
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "zeroconf_unsupported"
+
+
+async def test_zeroconf_prefers_https_over_http(hass, enable_custom_integrations) -> None:
+    info_http = {
+        "host": "sk.local",
+        "port": 3000,
+        "type": "_signalk-http._tcp.local.",
+        "properties": {b"self": b"urn:mrn:imo:mmsi:261006533"},
+    }
+    info_https = {
+        "host": "sk.local",
+        "port": 3443,
+        "type": "_signalk-https._tcp.local.",
+        "properties": {b"self": b"urn:mrn:imo:mmsi:261006533"},
+    }
+
+    result_http = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "zeroconf"}, data=info_http
+    )
+    assert result_http["type"] == FlowResultType.FORM
+
+    result_https = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "zeroconf"}, data=info_https
+    )
+    assert result_https["type"] == FlowResultType.FORM
+
+    in_progress = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert len(in_progress) == 1
+    assert in_progress[0]["flow_id"] == result_https["flow_id"]
 
 
 async def test_config_flow_unique_id_prevents_duplicates(hass, enable_custom_integrations) -> None:
@@ -1350,6 +1412,108 @@ def test_zeroconf_title_self_generic() -> None:
 
     info = SimpleNamespace(properties={b"self": b"urn:mrn:signalk:foo:bar"})
     assert _zeroconf_title(info) == "Vessel urn:mrn:signalk:foo:bar"
+
+
+def test_zeroconf_self_id_mmsi() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_self_id
+
+    info = SimpleNamespace(properties={b"self": b"urn:mrn:imo:mmsi:261006533"})
+    assert _zeroconf_self_id(info) == "mmsi:261006533"
+
+
+def test_zeroconf_self_id_empty() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_self_id
+
+    info = SimpleNamespace(properties={b"self": b"  "})
+    assert _zeroconf_self_id(info) is None
+
+
+def test_zeroconf_self_id_mmsi_without_digits() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_self_id
+
+    info = SimpleNamespace(properties={b"self": b"mmsi:"})
+    assert _zeroconf_self_id(info) is None
+
+
+def test_zeroconf_self_id_vessels_prefix() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_self_id
+
+    info = SimpleNamespace(properties={b"self": b"vessels.urn:mrn:signalk:uuid:ABC"})
+    assert _zeroconf_self_id(info) == "urn:mrn:signalk:uuid:abc"
+
+
+async def test_zeroconf_aborts_when_self_configured(hass, enable_custom_integrations) -> None:
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_VESSEL_ID: "mmsi:261006533"},
+    )
+    entry.add_to_hass(hass)
+    info = {
+        "host": "sk.local",
+        "port": 3000,
+        "type": "_signalk-http._tcp.local.",
+        "properties": {b"self": b"urn:mrn:imo:mmsi:261006533"},
+    }
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "zeroconf"}, data=info
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_zeroconf_https_dedup_ignores_self_flow(
+    hass, enable_custom_integrations, monkeypatch
+) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow.context = {}
+    flow.flow_id = "flow1"
+    info = SimpleNamespace(
+        host="sk.local",
+        hostname=None,
+        port=3443,
+        type="_signalk-https._tcp.local.",
+        addresses=[],
+        properties={b"self": b"urn:mrn:imo:mmsi:261006533"},
+    )
+
+    monkeypatch.setattr(
+        flow,
+        "_async_in_progress",
+        Mock(return_value=[{"flow_id": flow.flow_id}]),
+    )
+    monkeypatch.setattr(flow, "async_set_unique_id", AsyncMock())
+
+    result = await flow.async_step_zeroconf(info)
+    assert result["type"] == FlowResultType.FORM
+
+
+async def test_zeroconf_does_not_abort_on_other_vessel(hass, enable_custom_integrations) -> None:
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_VESSEL_ID: "mmsi:000000000"})
+    entry.add_to_hass(hass)
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow.context = {}
+    info = SimpleNamespace(
+        host="sk.local",
+        hostname=None,
+        port=3000,
+        type="_signalk-http._tcp.local.",
+        addresses=[],
+        properties={b"self": b"urn:mrn:imo:mmsi:261006533"},
+    )
+
+    result = await flow.async_step_zeroconf(info)
+    assert result["type"] == FlowResultType.FORM
 
 
 def test_zeroconf_host_invalid_address() -> None:

@@ -6,6 +6,7 @@ from typing import Any, Iterable
 
 
 def normalize_notification_paths(value: Any) -> list[str]:
+    # Normalize user input so downstream code always sees a clean, deduped list.
     if not value:
         return []
     if isinstance(value, str):
@@ -34,6 +35,7 @@ def normalize_notification_paths(value: Any) -> list[str]:
 
 
 def paths_to_text(paths: Iterable[str] | None) -> str:
+    # Keep storage/UI round-trips stable by trimming and dropping empty lines.
     if not paths:
         return ""
     cleaned = [path.strip() for path in paths if isinstance(path, str) and path.strip()]

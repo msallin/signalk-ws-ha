@@ -200,6 +200,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if display_name:
             self.context["title_placeholders"] = {"name": display_name}
         use_ssl = _zeroconf_use_ssl(service_type)
+        self_id = _zeroconf_self_id(discovery_info)
+        if self_id:
+            # Dedupe discovery cards per vessel; HTTPS should replace HTTP when both exist.
+            await self.async_set_unique_id(self_id, raise_on_progress=not use_ssl)
+            if use_ssl:
+                for progress in self._async_in_progress(
+                    include_uninitialized=True, match_context={"unique_id": self_id}
+                ):
+                    if progress["flow_id"] != self.flow_id:
+                        self.hass.config_entries.flow.async_abort(progress["flow_id"])
+            for entry in self._async_current_entries():
+                vessel_id = _normalize_self_id(entry.data.get(CONF_VESSEL_ID))
+                if vessel_id == self_id:
+                    return self.async_abort(reason="already_configured")
 
         self._zeroconf_defaults = {
             CONF_HOST: host or "",
@@ -603,6 +617,7 @@ def _group_options() -> dict[str, str]:
 
 
 def _normalize_groups(groups: Any | None) -> list[str]:
+    # Normalize group selections so options stay valid across schema changes.
     if not groups:
         return list(DEFAULT_GROUPS)
     selected = [group for group in groups if isinstance(group, str)]
@@ -643,6 +658,24 @@ def _zeroconf_properties(discovery_info: Any) -> dict[str, str]:
     return normalized
 
 
+def _normalize_self_id(value: Any) -> str | None:
+    # Normalize self identifiers so zeroconf discovery dedupes consistently.
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.startswith("vessels."):
+        normalized = normalized[len("vessels.") :]
+    lower = normalized.lower()
+    if "mmsi" in lower:
+        digits = "".join(ch for ch in normalized if ch.isdigit())
+        if digits:
+            return f"mmsi:{digits}"
+        return None
+    return lower
+
+
 def _zeroconf_title(discovery_info: Any) -> str | None:
     props = _zeroconf_properties(discovery_info)
     name = props.get("vname") or props.get("name")
@@ -665,12 +698,19 @@ def _zeroconf_title(discovery_info: Any) -> str | None:
     return f"Vessel {normalized}"
 
 
+def _zeroconf_self_id(discovery_info: Any) -> str | None:
+    props = _zeroconf_properties(discovery_info)
+    return _normalize_self_id(props.get("self"))
+
+
 def _zeroconf_host(discovery_info: Any) -> str | None:
     host = _zeroconf_attr(discovery_info, "host")
     if not host:
         host = _zeroconf_attr(discovery_info, "hostname")
     if not host:
         addresses = _zeroconf_attr(discovery_info, "addresses") or []
+        if not addresses:
+            addresses = _zeroconf_attr(discovery_info, "ip_addresses") or []
         if addresses:
             try:
                 host = str(ip_address(addresses[0]))
