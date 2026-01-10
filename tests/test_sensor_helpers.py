@@ -517,6 +517,26 @@ def test_sensor_refresh_on_first_seen() -> None:
     assert sensor._should_refresh_on_idle() is True
 
 
+def test_sensor_no_idle_refresh_without_seen() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+
+    assert sensor._should_refresh_on_idle() is False
+
+
 def test_sensor_record_write_without_last_seen() -> None:
     entry = _make_entry()
     spec = DiscoveredEntity(

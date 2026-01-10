@@ -35,10 +35,10 @@ DEFAULT_POLICY = "ideal"
 # Signal K subscription periods alone to protect the recorder/UI from bursts.
 DEFAULT_MIN_UPDATE_MS = 5000
 # Force a periodic write even when values stay within tolerance to keep HA fresh.
-DEFAULT_MAX_IDLE_WRITE_SECONDS = 60.0
-DEFAULT_STALE_SECONDS = 300.0
-# Position tolerance in degrees (~3.5 m latitude at the equator).
-DEFAULT_POSITION_TOLERANCE_DEG = 0.0000315
+DEFAULT_MAX_IDLE_WRITE_SECONDS = 300.0
+DEFAULT_STALE_SECONDS = 600.0
+# Position tolerance in meters.
+DEFAULT_POSITION_TOLERANCE_M = 5.0
 
 SK_PATH_POSITION = "navigation.position"
 SK_PATH_NOTIFICATIONS = "notifications.*"

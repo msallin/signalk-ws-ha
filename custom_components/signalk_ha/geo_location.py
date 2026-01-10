@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
@@ -17,7 +18,7 @@ from .const import (
     DEFAULT_MAX_IDLE_WRITE_SECONDS,
     DEFAULT_MIN_UPDATE_MS,
     DEFAULT_PERIOD_MS,
-    DEFAULT_POSITION_TOLERANCE_DEG,
+    DEFAULT_POSITION_TOLERANCE_M,
     DEFAULT_STALE_SECONDS,
     SK_PATH_POSITION,
 )
@@ -136,7 +137,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
         data["subscription_period_seconds"] = DEFAULT_PERIOD_MS / 1000.0
         data["min_update_ms"] = DEFAULT_MIN_UPDATE_MS
         data["stale_seconds"] = DEFAULT_STALE_SECONDS
-        data["tolerance"] = DEFAULT_POSITION_TOLERANCE_DEG
+        data["tolerance"] = DEFAULT_POSITION_TOLERANCE_M
         if self._description:
             data["description"] = self._description
         source = self.coordinator.last_source_by_path.get(SK_PATH_POSITION)
@@ -188,7 +189,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
 
         if coords and self._last_coords:
             # Position tolerance reduces churn from GPS jitter while anchored.
-            return _coord_distance(coords, self._last_coords) > DEFAULT_POSITION_TOLERANCE_DEG
+            return _coord_distance(coords, self._last_coords) > DEFAULT_POSITION_TOLERANCE_M
         return coords != self._last_coords
 
     def _current_seen_at(self) -> dt_util.dt | None:
@@ -196,7 +197,21 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
 
 
 def _coord_distance(a: tuple[float, float], b: tuple[float, float]) -> float:
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+    # Haversine distance on a sphere:
+    # 1) Convert lat/lon deltas to radians.
+    # 2) Compute haversine of the central angle (sin²(Δφ/2) + cosφ1·cosφ2·sin²(Δλ/2)).
+    # 3) Convert the central angle back to meters using Earth's mean radius.
+    lat1, lon1 = a
+    lat2, lon2 = b
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    sin_dlat = math.sin(dlat / 2.0)
+    sin_dlon = math.sin(dlon / 2.0)
+    hav = (
+        sin_dlat * sin_dlat
+        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * sin_dlon * sin_dlon
+    )
+    return 2.0 * 6371000.0 * math.asin(math.sqrt(hav))
 
 
 def _last_seen(coordinator: SignalKCoordinator) -> str | None:

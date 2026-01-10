@@ -8,7 +8,7 @@ from typing import Any, Iterable
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
-from .const import DEFAULT_PERIOD_MS, SK_PATH_POSITION
+from .const import DEFAULT_PERIOD_MS, DEFAULT_POSITION_TOLERANCE_M, SK_PATH_POSITION
 from .mapping import Conversion, apply_conversion, lookup_mapping
 from .schema import SCHEMA_GROUPS, lookup_schema
 
@@ -169,7 +169,7 @@ def _add_entity(
                 device_class=None,
                 state_class=None,
                 conversion=None,
-                tolerance=0.00002,
+                tolerance=DEFAULT_POSITION_TOLERANCE_M,
                 min_update_seconds=None,
                 meta_units=meta_units,
                 period_ms=DEFAULT_PERIOD_MS,
@@ -337,7 +337,7 @@ def _tolerance_from_meta(meta_units: Any) -> float | None:
         return None
     units = meta_units.lower()
     if units in ("k", "degc", "c"):
-        return 0.1
+        return 0.2
     if units in ("pa", "hpa"):
         return 0.5
     if units == "ratio":
