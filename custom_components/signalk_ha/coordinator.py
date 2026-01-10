@@ -782,11 +782,13 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return False
 
     def _start_reauth(self) -> None:
-        if self._reauth_started:
+        if self._reauth_started or self._stop_event.is_set():
             return
         self._reauth_started = True
         self._auth.mark_access_request_active()
-        self.hass.async_create_task(self._entry.async_start_reauth(self.hass))
+        reauth_coro = self._entry.async_start_reauth(self.hass)
+        if asyncio.iscoroutine(reauth_coro):
+            self.hass.async_create_task(reauth_coro)
 
     def _schedule_stale_checks(self) -> None:
         if self._stale_unsub is not None:

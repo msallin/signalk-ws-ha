@@ -818,6 +818,27 @@ async def test_run_backoff_increases_on_retries(hass, monkeypatch) -> None:
     assert coordinator.last_backoff == pytest.approx(coordinator_module._BACKOFF_MIN * 2)
 
 
+def test_start_reauth_skips_when_stopping(hass) -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._stop_event.set()
+    entry.async_start_reauth = Mock()
+
+    coordinator._start_reauth()
+
+    entry.async_start_reauth.assert_not_called()
+
+
+def test_start_reauth_ignores_none(hass) -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    entry.async_start_reauth = Mock(return_value=None)
+
+    coordinator._start_reauth()
+
+    entry.async_start_reauth.assert_called_once()
+
+
 async def test_discovery_coordinator_updates_identity(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
