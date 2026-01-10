@@ -49,6 +49,7 @@ async def async_fetch_discovery(
     url = urlunsplit(urlsplit(server_url)._replace(path="/signalk", query=""))
     ssl_context = build_ssl_param(verify_ssl)
 
+    # The discovery document is the source of truth for REST/WS endpoints.
     async with async_timeout.timeout(5):
         async with session.get(url, ssl=ssl_context) as resp:
             if resp.status in (401, 403):
@@ -68,6 +69,7 @@ def parse_discovery(data: dict[str, Any]) -> DiscoveryInfo:
     if not isinstance(v1, dict):
         raise ValueError("Discovery missing endpoints.v1")
 
+    # Avoid hardcoded paths; trust the server-provided endpoints.
     http_base = v1.get("signalk-http")
     ws_stream = v1.get("signalk-ws")
     if not isinstance(http_base, str) or not http_base:

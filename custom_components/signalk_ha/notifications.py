@@ -24,6 +24,7 @@ def normalize_notification_paths(value: Any) -> list[str]:
         if not path:
             continue
         if not path.startswith("notifications."):
+            # Users often paste shorter paths; normalize to the notifications namespace.
             path = f"notifications.{path}"
         if path in seen:
             continue

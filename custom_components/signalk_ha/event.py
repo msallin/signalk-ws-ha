@@ -90,6 +90,7 @@ class SignalKNotificationEvent(CoordinatorEntity, EventEntity):
     def handle_notification(self, event_data: dict[str, Any]) -> None:
         if not self.coordinator.notifications_enabled:
             return
+        # Events are per-path entities, so filter to the configured notification path.
         if event_data.get("path") != self._path:
             return
         event_type = _notification_event_type(event_data.get("state"))
@@ -118,6 +119,7 @@ class _SignalKNotificationListener:
         self._entities: dict[str, SignalKNotificationEvent] = entities or {}
         self._allowed_paths = allowed_paths
         self._allow_all = allow_all
+        # Path filtering keeps event entity creation explicit and bounded.
 
     @callback
     def handle_notification(self, event_data: dict[str, Any]) -> None:

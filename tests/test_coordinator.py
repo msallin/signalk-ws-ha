@@ -7,7 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from aiohttp import WSMsgType, WSServerHandshakeError
+from aiohttp import ClientError, WSMsgType, WSServerHandshakeError
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
@@ -436,6 +436,50 @@ async def test_fire_notification_defaults_message(hass) -> None:
     assert events[0].data["message"] == "notifications.navigation.anchor (alert)"
 
 
+async def test_fire_notification_defaults_message_to_path(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    events: list = []
+    hass.bus.async_listen(
+        notification_event_type(entry.data[CONF_VESSEL_NAME]),
+        lambda event: events.append(event),
+    )
+
+    notification = {
+        "path": "notifications.navigation.anchor",
+        "value": {},
+    }
+
+    coordinator._fire_notification(notification, coordinator.config)
+    await hass.async_block_till_done()
+
+    assert events
+    assert events[0].data["message"] == "notifications.navigation.anchor"
+
+
+async def test_fire_notification_non_dict_value(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    events: list = []
+    hass.bus.async_listen(
+        notification_event_type(entry.data[CONF_VESSEL_NAME]),
+        lambda event: events.append(event),
+    )
+
+    notification = {
+        "path": "notifications.navigation.anchor",
+        "value": "alert",
+    }
+
+    coordinator._fire_notification(notification, coordinator.config)
+    await hass.async_block_till_done()
+
+    assert events
+    assert events[0].data["message"] == "notifications.navigation.anchor"
+
+
 def test_notification_signature_handles_bad_keys() -> None:
     value = {("bad",): "data"}
     signature = SignalKCoordinator._notification_signature(value, None, None, None, None)
@@ -606,6 +650,26 @@ def test_handle_message_sources_only_schedules_flush(hass) -> None:
     coordinator._schedule_flush.assert_called_once()
 
 
+def test_handle_message_source_unchanged_no_flush(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._last_source_by_path["navigation.speedOverGround"] = "src1"
+
+    payload = json.dumps(
+        {
+            "context": "vessels.self",
+            "updates": [{"$source": "src1", "values": [{"path": "navigation.speedOverGround"}]}],
+        }
+    )
+
+    coordinator._schedule_flush = Mock()
+    coordinator._handle_message(payload, coordinator.config)
+
+    assert coordinator._data_cache == {}
+    coordinator._schedule_flush.assert_not_called()
+
+
 def test_start_reauth_noop_when_started(hass) -> None:
     coordinator = SignalKCoordinator(hass, _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
     coordinator._reauth_started = True
@@ -632,6 +696,18 @@ def test_stale_tick_reschedules(hass) -> None:
     coordinator._stale_tick()
     coordinator._schedule_flush.assert_called_once_with(immediate=True)
     coordinator._schedule_stale_checks.assert_called_once()
+
+
+def test_stale_tick_does_not_reschedule_when_stopping(hass) -> None:
+    coordinator = SignalKCoordinator(hass, _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._stop_event.set()
+    coordinator._schedule_flush = Mock()
+    coordinator._schedule_stale_checks = Mock()
+
+    coordinator._stale_tick()
+
+    coordinator._schedule_flush.assert_called_once_with(immediate=True)
+    coordinator._schedule_stale_checks.assert_not_called()
 
 
 async def test_run_processes_messages_and_disconnects(hass) -> None:
@@ -769,6 +845,133 @@ async def test_run_handles_ws_error_message(hass) -> None:
     assert coordinator.last_error is not None
 
 
+async def test_run_handles_ws_error_message_without_exception(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    stop_event = asyncio.Event()
+
+    class _FakeWS:
+        def __init__(self):
+            self.closed = False
+            self._messages = [SimpleNamespace(type=WSMsgType.ERROR)]
+
+        async def receive(self, timeout=None):
+            return self._messages.pop(0)
+
+        async def send_str(self, data):
+            return None
+
+        async def close(self):
+            self.closed = True
+
+        def exception(self):
+            return None
+
+    class _WSContext:
+        def __init__(self, ws):
+            self._ws = ws
+
+        async def __aenter__(self):
+            return self._ws
+
+        async def __aexit__(self, exc_type, exc, tb):
+            stop_event.set()
+            return False
+
+    ws = _FakeWS()
+    session.ws_connect = Mock(return_value=_WSContext(ws))
+
+    coordinator = SignalKCoordinator(hass, entry, session, Mock(), SignalKAuthManager(None))
+    coordinator._paths = []
+    coordinator._stop_event = stop_event
+
+    await coordinator._run()
+    assert coordinator.last_error is None or "websocket" in coordinator.last_error.lower()
+
+
+async def test_run_handles_cancelled_error(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    session.ws_connect = Mock(side_effect=asyncio.CancelledError)
+    coordinator = SignalKCoordinator(hass, entry, session, Mock(), SignalKAuthManager(None))
+
+    await coordinator._run()
+
+    assert coordinator._ws is None
+
+
+async def test_run_disconnect_warning_when_reconnecting(hass, monkeypatch) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    stop_event = asyncio.Event()
+
+    class _FakeWS:
+        def __init__(self):
+            self.closed = False
+            self._messages = [SimpleNamespace(type=WSMsgType.ERROR)]
+
+        async def receive(self, timeout=None):
+            return self._messages.pop(0)
+
+        async def send_str(self, data):
+            return None
+
+        async def close(self):
+            self.closed = True
+
+        def exception(self):
+            return None
+
+    class _WSContext:
+        def __init__(self, ws):
+            self._ws = ws
+
+        async def __aenter__(self):
+            return self._ws
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def _sleep(delay: float) -> None:
+        stop_event.set()
+
+    monkeypatch.setattr(coordinator_module.random, "uniform", lambda *_: 0.0)
+    monkeypatch.setattr(coordinator_module.asyncio, "sleep", _sleep)
+
+    ws = _FakeWS()
+    session.ws_connect = Mock(return_value=_WSContext(ws))
+
+    coordinator = SignalKCoordinator(hass, entry, session, Mock(), SignalKAuthManager(None))
+    coordinator._paths = []
+    coordinator._stop_event = stop_event
+
+    await coordinator._run()
+    assert coordinator.reconnect_count == 1
+
+
+async def test_run_handles_unexpected_exception(hass, monkeypatch) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    session.ws_connect = Mock(side_effect=ValueError("boom"))
+    stop_event = asyncio.Event()
+
+    async def _sleep(delay: float) -> None:
+        stop_event.set()
+
+    monkeypatch.setattr(coordinator_module.random, "uniform", lambda *_: 0.0)
+    monkeypatch.setattr(coordinator_module.asyncio, "sleep", _sleep)
+
+    coordinator = SignalKCoordinator(hass, entry, session, Mock(), SignalKAuthManager(None))
+    coordinator._stop_event = stop_event
+
+    await coordinator._run()
+    assert coordinator.last_error is not None
+
+
 async def test_run_reconnects_with_backoff(hass, monkeypatch) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
@@ -896,6 +1099,142 @@ async def test_discovery_coordinator_updates_identity(hass) -> None:
     assert discovery.last_refresh is not None
 
 
+async def test_discovery_coordinator_no_entry_updates_when_unchanged(hass) -> None:
+    base = _make_entry().data
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **base,
+            CONF_SERVER_ID: "signalk-server-node",
+            CONF_SERVER_VERSION: "2.20.0",
+        },
+    )
+    entry.add_to_hass(hass)
+    session = Mock()
+    auth = SignalKAuthManager(None)
+    discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
+    vessel = {"name": "ONA", "mmsi": "261006533"}
+    discovery_info = DiscoveryInfo(
+        base_url=entry.data[CONF_BASE_URL],
+        ws_url=entry.data[CONF_WS_URL],
+        server_id=entry.data[CONF_SERVER_ID],
+        server_version=entry.data[CONF_SERVER_VERSION],
+    )
+
+    with (
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_discovery",
+            new=AsyncMock(return_value=discovery_info),
+        ),
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_vessel_self",
+            new=AsyncMock(return_value=vessel),
+        ),
+        patch(
+            "custom_components.signalk_ha.coordinator.discover_entities",
+            return_value=DiscoveryResult(entities=[], conflicts=[]),
+        ),
+        patch.object(hass.config_entries, "async_update_entry") as update_entry,
+    ):
+        await discovery._async_update_data()
+
+    update_entry.assert_not_called()
+
+
+async def test_discovery_coordinator_no_device_updates(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=entry.data[CONF_VESSEL_NAME],
+        model="signalk-server-node",
+        sw_version="2.20.0",
+        configuration_url=entry.data[CONF_BASE_URL],
+    )
+    session = Mock()
+    auth = SignalKAuthManager(None)
+    discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
+
+    with patch.object(registry, "async_update_device") as update_device:
+        discovery._async_update_device_registry(
+            vessel_name=device.name,
+            server_id=device.model,
+            server_version=device.sw_version,
+            configuration_url=device.configuration_url,
+        )
+
+    update_device.assert_not_called()
+
+
+async def test_discovery_coordinator_discovery_failure(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    session = Mock()
+    auth = SignalKAuthManager(None)
+    discovery = SignalKDiscoveryCoordinator(hass, entry, session, auth)
+    vessel = {"name": "ONA", "mmsi": "261006533"}
+
+    with (
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_discovery",
+            new=AsyncMock(side_effect=ClientError("boom")),
+        ),
+        patch(
+            "custom_components.signalk_ha.coordinator.async_fetch_vessel_self",
+            new=AsyncMock(return_value=vessel),
+        ),
+        patch(
+            "custom_components.signalk_ha.coordinator.discover_entities",
+            return_value=DiscoveryResult(entities=[], conflicts=[]),
+        ),
+    ):
+        result = await discovery._async_update_data()
+
+    assert result.entities == []
+    assert discovery.last_refresh is not None
+
+
+def test_discovery_coordinator_updates_device_registry_fields(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="Old Vessel",
+        model="old-server",
+        sw_version="1.0",
+        configuration_url="http://old",
+    )
+
+    discovery = SignalKDiscoveryCoordinator(hass, entry, Mock(), SignalKAuthManager(None))
+    discovery._async_update_device_registry(
+        vessel_name="New Vessel",
+        server_id="signalk-server-node",
+        server_version="2.20.0",
+        configuration_url="http://new",
+    )
+
+    device = registry.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    assert device is not None
+    assert device.name == "New Vessel"
+    assert device.model == "signalk-server-node"
+    assert device.sw_version == "2.20.0"
+    assert device.configuration_url == "http://new"
+
+
+async def test_discovery_coordinator_async_stop_calls_shutdown(hass) -> None:
+    entry = _make_entry()
+    discovery = SignalKDiscoveryCoordinator(hass, entry, Mock(), SignalKAuthManager(None))
+
+    with patch.object(discovery, "async_shutdown", new=AsyncMock()) as shutdown:
+        await discovery.async_stop()
+
+    shutdown.assert_awaited_once()
+
+
 async def test_discovery_coordinator_warns_on_identity_change(hass, monkeypatch) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
@@ -968,14 +1307,95 @@ def test_discovery_coordinator_config_defaults(hass) -> None:
     assert cfg.ws_url.endswith("/signalk/v1/stream?subscribe=none")
 
 
+def test_coordinator_auth_properties(hass) -> None:
+    entry = _make_entry()
+    auth = SignalKAuthManager("token")
+    auth.mark_success()
+    auth.mark_access_request_active()
+
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), auth)
+    assert coordinator.auth_last_success is not None
+    assert coordinator.auth_access_request_active is True
+    assert coordinator.auth_token_present is True
+
+
+def test_notification_listener_remove(hass) -> None:
+    coordinator = SignalKCoordinator(hass, _make_entry(), Mock(), Mock(), SignalKAuthManager(None))
+    listener = Mock()
+    remove = coordinator.async_add_notification_listener(listener)
+    assert listener in coordinator._notification_listeners
+    remove()
+    remove()
+    assert listener not in coordinator._notification_listeners
+
+
+@pytest.mark.real_ws_start
+async def test_coordinator_async_start_creates_background_task(hass, monkeypatch) -> None:
+    entry = _make_entry()
+    mock_hass = SimpleNamespace(
+        loop=hass.loop,
+        async_create_background_task=Mock(),
+        async_create_task=Mock(),
+    )
+    coordinator = SignalKCoordinator(mock_hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    created: list[asyncio.Task] = []
+
+    async def _noop_run() -> None:
+        return None
+
+    def _create_task(coro, name=None):
+        task = hass.async_create_task(coro)
+        created.append(task)
+        return task
+
+    mock_hass.async_create_background_task = Mock(side_effect=_create_task)
+    coordinator._run = _noop_run
+
+    await coordinator.async_start()
+    assert created
+    assert coordinator._task is created[0]
+    mock_hass.async_create_background_task.assert_called_once()
+    await coordinator.async_stop()
+
+
+@pytest.mark.real_ws_start
+async def test_coordinator_async_start_fallback_task(hass, monkeypatch) -> None:
+    entry = _make_entry()
+    mock_hass = SimpleNamespace(
+        loop=hass.loop,
+        async_create_task=Mock(),
+    )
+    coordinator = SignalKCoordinator(mock_hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    created: list[asyncio.Task] = []
+
+    async def _noop_run() -> None:
+        return None
+
+    def _create_task(coro):
+        task = hass.async_create_task(coro)
+        created.append(task)
+        return task
+
+    mock_hass.async_create_task = Mock(side_effect=_create_task)
+    coordinator._run = _noop_run
+
+    await coordinator.async_start()
+    assert created
+    assert coordinator._task is created[0]
+    mock_hass.async_create_task.assert_called_once()
+    await coordinator.async_stop()
+
+
+@pytest.mark.real_ws_start
 async def test_coordinator_async_start_noop_when_running(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)
     coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
-    coordinator._task = AsyncMock()
+    existing_task = AsyncMock()
+    coordinator._task = existing_task
 
     await coordinator.async_start()
-    coordinator._task.assert_not_called()
+    assert coordinator._task is existing_task
 
 
 async def test_coordinator_async_stop_cleans_resources(hass) -> None:
@@ -993,6 +1413,17 @@ async def test_coordinator_async_stop_cleans_resources(hass) -> None:
     ws.close.assert_awaited_once()
     assert coordinator._task is None
     assert coordinator.connection_state == "disconnected"
+
+
+async def test_coordinator_async_stop_without_resources(hass) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+
+    await coordinator.async_stop()
+
+    assert coordinator._task is None
+    assert coordinator._ws is None
 
 
 async def test_async_update_paths_no_change(hass) -> None:

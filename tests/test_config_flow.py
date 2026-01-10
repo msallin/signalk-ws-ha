@@ -255,6 +255,13 @@ def test_zeroconf_host_uses_address() -> None:
     assert _zeroconf_host(info) == "10.0.0.1"
 
 
+def test_zeroconf_host_missing_address() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_host
+
+    info = SimpleNamespace(host=None, hostname=None, addresses=[])
+    assert _zeroconf_host(info) is None
+
+
 def test_zeroconf_use_ssl_non_secure() -> None:
     from custom_components.signalk_ha.config_flow import _zeroconf_use_ssl
 
@@ -628,6 +635,32 @@ async def test_config_flow_discovery_timeout(hass, enable_custom_integrations) -
     assert result["errors"]["base"] == "cannot_connect"
 
 
+async def test_config_flow_discovery_auth_required(hass, enable_custom_integrations) -> None:
+    flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(side_effect=AuthRequired()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_get_clientsession",
+            return_value=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            flow["flow_id"],
+            {
+                CONF_HOST: "sk.local",
+                CONF_PORT: 3000,
+                CONF_SSL: False,
+                CONF_VERIFY_SSL: True,
+            },
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == "cannot_connect"
+
+
 async def test_config_flow_cannot_connect(hass, enable_custom_integrations) -> None:
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     with (
@@ -717,6 +750,16 @@ async def test_auth_step_without_pending_data(hass) -> None:
     assert result["reason"] == "auth_cancelled"
 
 
+async def test_notifications_step_without_pending_data(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    result = await flow.async_step_notifications()
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "auth_cancelled"
+
+
 async def test_auth_step_shows_progress_with_pending(hass) -> None:
     from custom_components.signalk_ha.config_flow import ConfigFlow
 
@@ -758,6 +801,45 @@ async def test_auth_step_progress_uses_access_request_url(hass) -> None:
     assert result["type"] == FlowResultType.SHOW_PROGRESS
     assert result["description_placeholders"]["approval_url"] == "http://sk.local/approve"
     flow._auth_task.cancel()
+
+
+async def test_ssl_fallback_sets_ignore_cert(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow._allow_ssl_fallback = True
+    flow._zeroconf_defaults = {}
+
+    async def _probe(value: str, verify_ssl: bool) -> str:
+        if verify_ssl:
+            raise ssl.SSLError("bad")
+        return value
+
+    result, verify_ssl = await flow._async_call_with_ssl_fallback(_probe, "ok", verify_ssl=True)
+
+    assert result == "ok"
+    assert verify_ssl is False
+    assert flow._zeroconf_defaults[CONF_VERIFY_SSL] is True
+
+
+async def test_ssl_fallback_without_zeroconf_defaults(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow._allow_ssl_fallback = True
+    flow._zeroconf_defaults = None
+
+    async def _probe(value: str, verify_ssl: bool) -> str:
+        if verify_ssl:
+            raise ssl.SSLError("bad")
+        return value
+
+    result, verify_ssl = await flow._async_call_with_ssl_fallback(_probe, "ok", verify_ssl=True)
+
+    assert result == "ok"
+    assert verify_ssl is False
 
 
 async def test_auth_finish_aborts_without_pending_data(hass) -> None:
@@ -1218,3 +1300,60 @@ async def test_auth_form_falls_back_to_access_url(hass) -> None:
 
     result = flow._show_auth_form()
     assert result["description_placeholders"]["approval_url"] == "http://sk.local/approve"
+
+
+def test_auth_form_without_pending_data(hass) -> None:
+    from custom_components.signalk_ha.config_flow import ConfigFlow
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow._pending_data = None
+    flow._access_request = AccessRequestInfo(
+        request_id="req1",
+        approval_url="http://sk.local/approve",
+        status_url=None,
+    )
+
+    result = flow._show_auth_form()
+    assert result["description_placeholders"]["approval_url"] == "http://sk.local/approve"
+
+
+def test_zeroconf_attr_from_dict() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_attr
+
+    assert _zeroconf_attr({"port": 1234}, "port") == 1234
+
+
+def test_zeroconf_properties_non_dict() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_properties
+
+    info = SimpleNamespace(properties="not-a-dict")
+    assert _zeroconf_properties(info) == {}
+
+
+def test_zeroconf_title_name_only() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_title
+
+    info = SimpleNamespace(properties={b"vname": b"ONA"})
+    assert _zeroconf_title(info) == "ONA"
+
+
+def test_zeroconf_title_self_mmsi() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_title
+
+    info = SimpleNamespace(properties={b"self": b"vessels.urn:mrn:signalk:mmsi:261006533"})
+    assert _zeroconf_title(info) == "MMSI 261006533"
+
+
+def test_zeroconf_title_self_generic() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_title
+
+    info = SimpleNamespace(properties={b"self": b"urn:mrn:signalk:foo:bar"})
+    assert _zeroconf_title(info) == "Vessel urn:mrn:signalk:foo:bar"
+
+
+def test_zeroconf_host_invalid_address() -> None:
+    from custom_components.signalk_ha.config_flow import _zeroconf_host
+
+    info = SimpleNamespace(host=None, hostname=None, addresses=["bad"])
+    assert _zeroconf_host(info) is None

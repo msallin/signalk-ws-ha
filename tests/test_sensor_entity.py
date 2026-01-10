@@ -85,6 +85,28 @@ async def test_coordinator_updates_sensor_state(hass, enable_custom_integrations
     assert attrs["spec_known"] is True
 
 
+def test_sensor_uses_spec_icon() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit="kn",
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+        icon="mdi:speedometer",
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+
+    assert sensor.icon == "mdi:speedometer"
+
+
 async def test_sensor_unavailable_when_disconnected(hass) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)

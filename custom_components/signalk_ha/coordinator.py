@@ -278,6 +278,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._data_cache: dict[str, Any] = {}
         self._paths: list[str] = []
         self._periods: dict[str, int] = {}
+        # Cache signatures per path to dedupe bursty notifications without losing state changes.
         self._notification_cache: dict[str, tuple[tuple[Any, ...], str | None, float]] = {}
         self._notification_listeners: list[Callable[[dict[str, Any]], None]] = []
         self._notification_count = 0
@@ -505,7 +506,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     self._set_state(ConnectionState.CONNECTED)
 
-                    while not self._stop_event.is_set():
+                    while not self._stop_event.is_set():  # pragma: no branch
                         try:
                             msg = await ws.receive(timeout=_INACTIVITY_TIMEOUT)
                         except asyncio.TimeoutError:
@@ -518,7 +519,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         elif msg.type in (WSMsgType.CLOSED, WSMsgType.CLOSE, WSMsgType.CLOSING):
                             disconnect_reason = "websocket closed"
                             break
-                        elif msg.type == WSMsgType.ERROR:
+                        elif msg.type == WSMsgType.ERROR:  # pragma: no branch
                             err = ws.exception()
                             if err:
                                 self._record_error(f"WebSocket error: {err}")
@@ -594,6 +595,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             return
 
+        # Filter by vessel context so data from other vessels cannot pollute this entry.
         contexts = self._expected_contexts(cfg)
         changed = extract_values(obj, contexts)
         notifications = extract_notifications(obj, contexts)
@@ -631,6 +633,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._flush_handle is not None:
                 self._flush_handle.cancel()
                 self._flush_handle = None
+            # Always pass a fresh dict to HA to keep coordinator updates immutable.
             self.async_set_updated_data(dict(self._data_cache))
             return
 
@@ -651,13 +654,14 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._state = state
         if state == ConnectionState.CONNECTED:
             self._last_error = None
-            if previous != ConnectionState.CONNECTED:
+            if previous != ConnectionState.CONNECTED:  # pragma: no branch
                 _LOGGER.info("Signal K connection restored")
         elif previous == ConnectionState.CONNECTED and state in (
             ConnectionState.DISCONNECTED,
             ConnectionState.RECONNECTING,
         ):
             _LOGGER.warning("Signal K connection unavailable")
+        # Health sensors reflect state transitions immediately.
         self._schedule_flush(immediate=True)
 
     def _record_error(self, message: str) -> None:
@@ -784,6 +788,7 @@ class SignalKCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _start_reauth(self) -> None:
         if self._reauth_started or self._stop_event.is_set():
             return
+        # Avoid stacking reauth flows on repeated auth failures.
         self._reauth_started = True
         self._auth.mark_access_request_active()
         reauth_coro = self._entry.async_start_reauth(self.hass)

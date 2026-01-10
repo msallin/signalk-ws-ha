@@ -241,6 +241,10 @@ def test_extract_request_id_from_href() -> None:
     assert _extract_request_id({"href": "/signalk/v1/access/requests/abc"}) == "abc"
 
 
+def test_extract_request_id_empty_href() -> None:
+    assert _extract_request_id({"href": "/"}) is None
+
+
 def test_extract_token_nested() -> None:
     token = _extract_token({"nested": {"access_token": "token123"}})
     assert token == "token123"
@@ -259,6 +263,16 @@ def test_extract_token_from_list() -> None:
 def test_extract_token_from_list_nested() -> None:
     token = _extract_token({"items": [{"inner": {"jwtToken": "token999"}}]})
     assert token == "token999"
+
+
+def test_extract_token_missing_in_list() -> None:
+    token = _extract_token({"items": [{"foo": "bar"}]})
+    assert token is None
+
+
+def test_extract_token_missing_in_dict() -> None:
+    token = _extract_token({"nested": {"foo": "bar"}})
+    assert token is None
 
 
 def test_is_rejected() -> None:

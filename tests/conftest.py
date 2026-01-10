@@ -24,7 +24,10 @@ def event_loop_policy():
 
 
 @pytest.fixture(autouse=True)
-def _mock_ws_start():
+def _mock_ws_start(request):
+    if request.node.get_closest_marker("real_ws_start"):
+        yield
+        return
     with patch(
         "custom_components.signalk_ha.coordinator.SignalKCoordinator.async_start",
         new=AsyncMock(),

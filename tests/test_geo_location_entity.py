@@ -26,6 +26,7 @@ from custom_components.signalk_ha.discovery import DiscoveredEntity, DiscoveryRe
 from custom_components.signalk_ha.geo_location import (
     SignalKPositionGeolocation,
     _coord_distance,
+    _is_stale,
     _path_available,
     _position_description,
     _position_spec_known,
@@ -236,8 +237,41 @@ def test_position_description_none() -> None:
     assert _position_description(discovery) is None
 
 
+def test_position_description_unmatched() -> None:
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    assert _position_description(discovery) is None
+
+
 def test_position_spec_known_false() -> None:
     discovery = SimpleNamespace(data=None)
+    assert _position_spec_known(discovery) is False
+
+
+def test_position_spec_known_unmatched() -> None:
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+        spec_known=True,
+    )
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
     assert _position_spec_known(discovery) is False
 
 
@@ -256,6 +290,52 @@ def test_position_spec_known_true() -> None:
     )
     discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
     assert _position_spec_known(discovery) is True
+
+
+def test_geo_location_handle_update_without_last_seen(hass) -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._state = ConnectionState.CONNECTED
+    coordinator.data = {"navigation.position": {"latitude": 1.0, "longitude": 2.0}}
+    discovery = SimpleNamespace(data=None)
+    entity = SignalKPositionGeolocation(coordinator, discovery, entry)
+    entity.async_write_ha_state = Mock()
+
+    entity._handle_coordinator_update()
+
+    assert entity._last_seen_at is None
+    entity.async_write_ha_state.assert_called_once()
+
+
+def test_geo_location_should_write_state_idle_without_last_seen(hass) -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=None)
+    entity = SignalKPositionGeolocation(coordinator, discovery, entry)
+    entity._last_write = time.monotonic() - (DEFAULT_MAX_IDLE_WRITE_SECONDS + 1)
+    entity._last_available = True
+    entity._last_coords = (1.0, 2.0)
+
+    assert entity._should_write_state((1.0, 2.0), True) is False
+
+
+def test_geo_location_should_write_state_no_coords(hass) -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=None)
+    entity = SignalKPositionGeolocation(coordinator, discovery, entry)
+    entity._last_write = time.monotonic() - (DEFAULT_MIN_UPDATE_MS / 1000.0 + 1)
+    entity._last_available = True
+    entity._last_coords = None
+
+    assert entity._should_write_state(None, True) is False
+
+
+def test_geo_location_is_stale_without_timestamp(hass) -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+
+    assert _is_stale(coordinator) is True
 
 
 def test_path_available_defaults_true() -> None:

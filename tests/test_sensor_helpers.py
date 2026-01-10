@@ -29,6 +29,7 @@ from custom_components.signalk_ha.discovery import DiscoveredEntity, DiscoveryRe
 from custom_components.signalk_ha.entity_utils import path_from_unique_id
 from custom_components.signalk_ha.sensor import (
     HealthSpec,
+    SignalKBaseSensor,
     SignalKHealthSensor,
     SignalKSensor,
     _is_stale,
@@ -481,6 +482,71 @@ def test_sensor_should_write_state_numeric_change_no_tolerance() -> None:
     assert sensor._should_write_state(11.0, True) is True
 
 
+def test_base_sensor_idle_refresh_and_record_write() -> None:
+    class _DummySensor(SignalKBaseSensor):
+        @property
+        def native_value(self):
+            return None
+
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    sensor = _DummySensor(coordinator, None, entry)
+
+    assert sensor._should_refresh_on_idle() is True
+    assert sensor._record_write() is None
+
+
+def test_sensor_refresh_on_first_seen() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._last_update_by_path[spec.path] = dt_util.utcnow()
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+
+    assert sensor._should_refresh_on_idle() is True
+
+
+def test_sensor_record_write_without_last_seen() -> None:
+    entry = _make_entry()
+    spec = DiscoveredEntity(
+        path="navigation.speedOverGround",
+        name="Speed Over Ground",
+        kind="sensor",
+        unit=None,
+        device_class=None,
+        state_class=None,
+        conversion=None,
+        tolerance=None,
+        min_update_seconds=None,
+    )
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    discovery = SimpleNamespace(data=DiscoveryResult(entities=[spec], conflicts=[]))
+    sensor = SignalKSensor(coordinator, discovery, entry, spec)
+
+    sensor._record_write()
+    assert sensor._last_seen_at is None
+
+
+def test_health_sensor_does_not_idle_refresh() -> None:
+    entry = _make_entry()
+    coordinator = SignalKCoordinator(Mock(), entry, Mock(), Mock(), SignalKAuthManager(None))
+    spec = HealthSpec("demo", "Demo", lambda coord: coord.connection_state)
+    sensor = SignalKHealthSensor(coordinator, entry, spec)
+
+    assert sensor._should_refresh_on_idle() is False
+
+
 def test_device_info_uses_base_url() -> None:
     entry = _make_entry()
     info = build_device_info(entry)
@@ -495,6 +561,29 @@ def test_last_notification_attributes_none() -> None:
         Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
     )
     assert _last_notification_attributes(coordinator) is None
+
+
+def test_last_notification_attributes_formats_timestamp() -> None:
+    coordinator = SignalKCoordinator(
+        Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
+    )
+    received_at = dt_util.utcnow()
+    coordinator._last_notification = {"received_at": received_at, "message": "test"}
+
+    attrs = _last_notification_attributes(coordinator)
+    assert attrs is not None
+    assert attrs["received_at"] == dt_util.as_utc(received_at).isoformat()
+
+
+def test_last_notification_attributes_without_timestamp() -> None:
+    coordinator = SignalKCoordinator(
+        Mock(), _make_entry(), Mock(), Mock(), SignalKAuthManager(None)
+    )
+    coordinator._last_notification = {"message": "test"}
+
+    attrs = _last_notification_attributes(coordinator)
+    assert attrs is not None
+    assert "received_at" not in attrs
 
 
 def test_sensor_specs_empty_without_data() -> None:

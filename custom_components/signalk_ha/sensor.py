@@ -314,12 +314,14 @@ class SignalKSensor(SignalKBaseSensor):
         if last_seen is None:
             return False
         if getattr(self, "_last_seen_at", None) is None:
+            # Force a first write once we see data so attributes reflect initial timestamps.
             return True
         return last_seen > self._last_seen_at
 
     def _record_write(self) -> None:
         last_seen = self._current_seen_at()
         if last_seen is not None:
+            # Track the last payload timestamp to suppress idle writes without new data.
             self._last_seen_at = last_seen
 
     def _current_seen_at(self) -> dt_util.dt | None:

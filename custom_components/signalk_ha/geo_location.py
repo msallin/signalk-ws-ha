@@ -125,6 +125,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
     def distance(self) -> float | None:
         if self.latitude is None or self.longitude is None:
             return None
+        # The device represents the vessel running HA, so distance to itself is always zero.
         return 0.0
 
     @property
@@ -186,6 +187,7 @@ class SignalKPositionGeolocation(CoordinatorEntity, GeolocationEvent):
             return True
 
         if coords and self._last_coords:
+            # Position tolerance reduces churn from GPS jitter while anchored.
             return _coord_distance(coords, self._last_coords) > DEFAULT_POSITION_TOLERANCE_DEG
         return coords != self._last_coords
 

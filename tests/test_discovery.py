@@ -107,6 +107,10 @@ def test_discovery_disambiguated_name_keeps_base_when_no_prefix() -> None:
     assert _disambiguated_name("speed", "Speed") == "Speed"
 
 
+def test_discovery_disambiguated_name_empty_prefix() -> None:
+    assert _disambiguated_name(".speed", "Speed") == "Speed"
+
+
 def test_discovery_disambiguated_name_skips_when_prefix_already_present() -> None:
     name = "Navigation Speed Over Ground"
     assert _disambiguated_name("navigation.speedOverGround", name) == name

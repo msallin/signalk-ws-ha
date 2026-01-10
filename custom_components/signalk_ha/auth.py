@@ -231,8 +231,9 @@ def _extract_request_id(data: dict[str, Any]) -> str | None:
             return value.strip()
     href = data.get("href") or data.get("statusUrl") or data.get("url")
     if isinstance(href, str):
+        # Some servers only return a URL; extract the trailing request id.
         parts = href.rstrip("/").split("/")
-        if parts:
+        if parts and parts[-1]:
             return parts[-1]
     return None
 
@@ -254,6 +255,7 @@ def _extract_status_url(data: dict[str, Any]) -> str | None:
 
 
 def _extract_token(data: dict[str, Any]) -> str | None:
+    # Servers vary widely in token shapes; scan common keys and nested containers.
     token_keys = ("token", "accessToken", "access_token", "jwt", "jwtToken")
     for key in token_keys:
         value = data.get(key)

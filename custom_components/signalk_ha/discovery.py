@@ -261,6 +261,7 @@ def _disambiguate_entities(entities: list[DiscoveredEntity]) -> list[DiscoveredE
     counts = Counter(entity.name for entity in entities)
     if not counts or max(counts.values()) <= 1:
         return entities
+    # Prefix duplicates with humanized path segments to keep names stable and readable.
     disambiguated: list[DiscoveredEntity] = []
     for entity in entities:
         if counts[entity.name] <= 1:

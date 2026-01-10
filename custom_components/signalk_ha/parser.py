@@ -33,6 +33,7 @@ def extract_values(
     if not isinstance(delta_obj, dict):
         return {}
 
+    # Drop deltas from other vessels to keep the cache strictly per entry.
     if expected_contexts and "context" in delta_obj:
         incoming = delta_obj.get("context")
         if not any(_context_matches(expected, incoming) for expected in expected_contexts):

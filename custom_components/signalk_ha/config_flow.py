@@ -16,7 +16,7 @@ from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover - typing-only imports
     from homeassistant.components.zeroconf import ZeroconfServiceInfo
 
 from .auth import (
@@ -233,9 +233,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         if not self._auth_task.done():
-            approval_url = None
-            if self._pending_data:
-                approval_url = _admin_access_url(self._pending_data[CONF_BASE_URL])
+            approval_url = _admin_access_url(self._pending_data[CONF_BASE_URL])
             if not approval_url and self._access_request:
                 approval_url = self._access_request.approval_url
 
@@ -411,6 +409,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except ssl.SSLError:
             if not self._allow_ssl_fallback or not verify_ssl:
                 raise
+            # Zeroconf discovery might advertise https while the server has a self-signed cert.
             result = await func(*args, False, **kwargs)
             if self._zeroconf_defaults is not None:
                 self._zeroconf_defaults[CONF_VERIFY_SSL] = True
@@ -520,6 +519,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _show_auth_form(self, errors: dict[str, str] | None = None) -> FlowResult:
         approval_url = None
         if self._pending_data:
+            # Prefer the server admin URL so users land in the right UI for access requests.
             approval_url = _admin_access_url(self._pending_data[CONF_BASE_URL])
         if not approval_url and self._access_request:
             approval_url = self._access_request.approval_url
