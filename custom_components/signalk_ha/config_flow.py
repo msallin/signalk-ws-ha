@@ -269,6 +269,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             token, vessel_data = await self._auth_task
         except AccessRequestRejected:
             errors["base"] = "auth_rejected"
+            try:
+                self._access_request = await self._async_start_access_request(
+                    self._pending_data[CONF_BASE_URL],
+                    self._pending_data[CONF_VERIFY_SSL],
+                    host=self._pending_data[CONF_HOST],
+                    port=self._pending_data[CONF_PORT],
+                )
+            except AccessRequestUnsupported:
+                errors["base"] = "auth_not_supported"
+            except AuthRequired:
+                errors["base"] = "auth_required"
+            except (asyncio.TimeoutError, ClientConnectorError, ClientError, OSError):
+                errors["base"] = "cannot_connect"
         except AccessRequestUnsupported:
             errors["base"] = "auth_not_supported"
         except asyncio.TimeoutError:

@@ -3,6 +3,7 @@ import ssl
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.signalk_ha.auth import (
@@ -970,6 +971,7 @@ async def test_config_flow_auth_rejected(hass, enable_custom_integrations) -> No
         approval_url=None,
         status_url=None,
     )
+    create_request = AsyncMock(return_value=access_request)
 
     with (
         patch(
@@ -982,7 +984,7 @@ async def test_config_flow_auth_rejected(hass, enable_custom_integrations) -> No
         ),
         patch(
             "custom_components.signalk_ha.config_flow.async_create_access_request",
-            new=AsyncMock(return_value=access_request),
+            new=create_request,
         ),
         patch(
             "custom_components.signalk_ha.config_flow.async_poll_access_request",
@@ -1010,6 +1012,70 @@ async def test_config_flow_auth_rejected(hass, enable_custom_integrations) -> No
 
     assert result["type"] == FlowResultType.FORM
     assert result["errors"]["base"] == "auth_rejected"
+    assert create_request.call_count == 2
+
+
+@pytest.mark.parametrize(
+    ("retry_exc", "expected_error"),
+    [
+        (AccessRequestUnsupported(), "auth_not_supported"),
+        (AuthRequired(), "auth_required"),
+        (asyncio.TimeoutError(), "cannot_connect"),
+    ],
+)
+async def test_config_flow_auth_rejected_retry_failure(
+    hass,
+    enable_custom_integrations,
+    retry_exc,
+    expected_error,
+) -> None:
+    flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    access_request = AccessRequestInfo(
+        request_id="req1",
+        approval_url=None,
+        status_url=None,
+    )
+    create_request = AsyncMock(side_effect=[access_request, retry_exc])
+
+    with (
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_discovery",
+            new=AsyncMock(return_value=_discovery_info()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_fetch_vessel_self",
+            new=AsyncMock(side_effect=AuthRequired()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_create_access_request",
+            new=create_request,
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_poll_access_request",
+            new=AsyncMock(side_effect=AccessRequestRejected()),
+        ),
+        patch(
+            "custom_components.signalk_ha.config_flow.async_get_clientsession",
+            return_value=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            flow["flow_id"],
+            {
+                CONF_HOST: "sk.local",
+                CONF_PORT: 3000,
+                CONF_SSL: False,
+                CONF_VERIFY_SSL: True,
+            },
+        )
+        assert result["type"] == FlowResultType.SHOW_PROGRESS
+        assert result["step_id"] == "auth"
+
+        await hass.async_block_till_done()
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == expected_error
 
 
 async def test_config_flow_auth_invalid_response(hass, enable_custom_integrations) -> None:
