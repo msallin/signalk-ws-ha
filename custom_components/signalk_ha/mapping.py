@@ -39,7 +39,7 @@ _EXACT_MAPPING: dict[str, PathMapping] = {
         state_class=SensorStateClass.MEASUREMENT,
         conversion=Conversion.MS_TO_KNOTS,
         expected_units=("m/s",),
-        tolerance=0.2,
+        tolerance=0.5,
     ),
     "navigation.speedThroughWater": PathMapping(
         unit="kn",
