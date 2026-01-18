@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0
+
+### Improvements
+
+- Add possibility to ignore specific event entities from being created.
+- Reduce data churn by improving tolerance values and calculations.
+
+### Bugfixes
+
+- Handle case when a access request is denied.
+
+### Miscellaneous
+
 ## 1.1.0
 
 ### Improvements
