@@ -22,6 +22,7 @@ from custom_components.signalk_ha.coordinator import ConnectionState, SignalKCoo
 from custom_components.signalk_ha.event import (
     SignalKNotificationEvent,
     _humanize_segment,
+    _is_ignored_path,
     _notification_attributes,
     _notification_event_type,
     _notification_name,
@@ -60,6 +61,11 @@ def test_notification_name_humanizes() -> None:
     assert _notification_name("notifications.navigation.anchor") == "Navigation Anchor Notification"
     assert _notification_name("notifications") == "Notification"
     assert _notification_name("custom.path") == "Custom Path Notification"
+    assert (
+        _is_ignored_path("notifications.security.accessRequest.any", ["notifications.security."])
+        is True
+    )
+    assert _is_ignored_path("notifications.navigation.anchor", ["notifications.security."]) is False
 
 
 def test_notification_attributes_formats_received_at() -> None:
@@ -286,6 +292,32 @@ async def test_event_setup_skips_without_paths(hass) -> None:
     assert added == []
 
 
+async def test_event_setup_ignores_security_paths(hass) -> None:
+    entry = _make_entry(
+        options={CONF_NOTIFICATION_PATHS: ["notifications.security.accessRequest.any"]}
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._state = ConnectionState.CONNECTED
+
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=Mock(),
+        auth=SignalKAuthManager(None),
+    )
+
+    added: list = []
+    await async_setup_entry(hass, entry, added.extend)
+
+    coordinator._fire_notification(
+        {"path": "notifications.security.accessRequest.any", "value": {"state": "alert"}},
+        coordinator.config,
+    )
+
+    assert added == []
+
+
 async def test_event_entity_handles_mismatched_path(hass) -> None:
     entry = _make_entry(options={CONF_NOTIFICATION_PATHS: ["notifications.navigation.anchor"]})
     entry.add_to_hass(hass)
@@ -385,6 +417,7 @@ def test_notification_listener_skips_invalid_or_disallowed_path(hass) -> None:
         created.extend,
         allowed_paths={"notifications.navigation.anchor"},
         allow_all=False,
+        ignored_prefixes=[],
         entities={},
     )
 
@@ -420,6 +453,29 @@ async def test_event_listener_creates_entity_for_wildcard(hass) -> None:
 
     coordinator._fire_notification(notification, coordinator.config)
     assert len(added) == 1
+
+
+async def test_event_listener_skips_security_path_for_wildcard(hass) -> None:
+    entry = _make_entry(options={CONF_NOTIFICATION_PATHS: ["notifications.*"]})
+    entry.add_to_hass(hass)
+
+    coordinator = SignalKCoordinator(hass, entry, Mock(), Mock(), SignalKAuthManager(None))
+    coordinator._state = ConnectionState.CONNECTED
+
+    entry.runtime_data = SignalKRuntimeData(
+        coordinator=coordinator,
+        discovery=Mock(),
+        auth=SignalKAuthManager(None),
+    )
+
+    added: list = []
+    await async_setup_entry(hass, entry, added.extend)
+
+    coordinator._fire_notification(
+        {"path": "notifications.security.accessRequest.any", "value": {"state": "alert"}},
+        coordinator.config,
+    )
+    assert added == []
 
 
 async def test_event_listener_creates_after_reenable(hass) -> None:

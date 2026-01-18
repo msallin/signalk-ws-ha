@@ -18,7 +18,8 @@
         "description": "Enable notifications and choose which paths should create Event entities. All notifications are sent to Home Assistant as events.",
         "data": {
           "enable_notifications": "Enable notifications",
-          "notification_paths": "Notification paths to create event entities for (one per line, empty to disable)"
+          "notification_paths": "Notification paths to create event entities for (one per line, empty to disable)",
+          "notification_ignore_prefixes": "Notification prefixes to ignore for event entities (one per line)"
         }
       },
       "auth": {
@@ -55,6 +56,7 @@
           "refresh_interval_hours": "Discovery refresh interval (hours)",
           "enable_notifications": "Enable notifications",
           "notification_paths": "Notification paths to create event entities for (one per line, empty to disable)",
+          "notification_ignore_prefixes": "Notification prefixes to ignore for event entities (one per line)",
           "groups": "Data groups to include"
         }
       }

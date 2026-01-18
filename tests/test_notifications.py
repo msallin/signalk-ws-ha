@@ -1,5 +1,6 @@
 from custom_components.signalk_ha.notifications import (
     normalize_notification_paths,
+    normalize_notification_prefixes,
     paths_to_text,
 )
 
@@ -36,3 +37,33 @@ def test_paths_to_text() -> None:
 
 def test_paths_to_text_empty() -> None:
     assert paths_to_text(None) == ""
+
+
+def test_normalize_notification_prefixes() -> None:
+    prefixes = normalize_notification_prefixes(
+        "notifications.security.*\nsecurity.accessRequest\n\n"
+    )
+    assert prefixes == [
+        "notifications.security.",
+        "notifications.security.accessRequest.",
+    ]
+
+
+def test_normalize_notification_prefixes_dedupes() -> None:
+    prefixes = normalize_notification_prefixes(
+        ["notifications.security.", "security", "notifications.security.*"]
+    )
+    assert prefixes == ["notifications.security."]
+
+
+def test_normalize_notification_prefixes_invalid_input() -> None:
+    assert normalize_notification_prefixes(42) == []
+
+
+def test_normalize_notification_prefixes_empty() -> None:
+    assert normalize_notification_prefixes(None) == []
+
+
+def test_normalize_notification_prefixes_skips_non_string_items() -> None:
+    prefixes = normalize_notification_prefixes(["notifications.security.", None])
+    assert prefixes == ["notifications.security."]

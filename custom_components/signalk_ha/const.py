@@ -15,6 +15,7 @@ CONF_REFRESH_INTERVAL_HOURS = "refresh_interval_hours"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_ENABLE_NOTIFICATIONS = "enable_notifications"
 CONF_NOTIFICATION_PATHS = "notification_paths"
+CONF_NOTIFICATION_IGNORE_PREFIXES = "notification_ignore_prefixes"
 CONF_GROUPS = "groups"
 CONF_SERVER_ID = "server_id"
 CONF_SERVER_VERSION = "server_version"
@@ -25,6 +26,7 @@ DEFAULT_VERIFY_SSL = True
 DEFAULT_REFRESH_INTERVAL_HOURS = 24
 DEFAULT_ENABLE_NOTIFICATIONS = True
 DEFAULT_NOTIFICATION_PATHS: tuple[str, ...] = ("notifications.*",)
+DEFAULT_NOTIFICATION_IGNORE_PREFIXES: tuple[str, ...] = ("notifications.security.",)
 DEFAULT_GROUPS = ("navigation", "environment", "tanks")
 
 DEFAULT_PERIOD_MS = 5000

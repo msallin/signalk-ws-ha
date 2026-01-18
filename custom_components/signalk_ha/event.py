@@ -13,14 +13,16 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_NOTIFICATION_IGNORE_PREFIXES,
     CONF_NOTIFICATION_PATHS,
+    DEFAULT_NOTIFICATION_IGNORE_PREFIXES,
     DEFAULT_NOTIFICATION_PATHS,
     DOMAIN,
     NOTIFICATION_EVENT_TYPES,
 )
 from .coordinator import SignalKCoordinator
 from .device_info import build_device_info
-from .notifications import normalize_notification_paths
+from .notifications import normalize_notification_paths, normalize_notification_prefixes
 
 
 async def async_setup_entry(
@@ -35,6 +37,9 @@ async def async_setup_entry(
     allowed_paths = normalize_notification_paths(
         entry.options.get(CONF_NOTIFICATION_PATHS, DEFAULT_NOTIFICATION_PATHS)
     )
+    ignored_prefixes = normalize_notification_prefixes(
+        entry.options.get(CONF_NOTIFICATION_IGNORE_PREFIXES, DEFAULT_NOTIFICATION_IGNORE_PREFIXES)
+    )
     # If the user hasn't opted in to any notification paths, keep the event platform idle.
     if not allowed_paths:
         return
@@ -43,7 +48,11 @@ async def async_setup_entry(
     entities: list[SignalKNotificationEvent] = []
 
     allow_all = "notifications.*" in allowed_paths
-    allowed_specific = {path for path in allowed_paths if path != "notifications.*"}
+    allowed_specific = {
+        path
+        for path in allowed_paths
+        if path != "notifications.*" and not _is_ignored_path(path, ignored_prefixes)
+    }
     # Create only explicitly selected events up front; wildcard events are created lazily.
 
     for path in allowed_specific:
@@ -65,6 +74,7 @@ async def async_setup_entry(
         async_add_entities,
         allowed_paths=allowed_specific,
         allow_all=allow_all,
+        ignored_prefixes=ignored_prefixes,
         entities={entity._path: entity for entity in entities},
     )
     entry.async_on_unload(coordinator.async_add_notification_listener(listener.handle_notification))
@@ -110,6 +120,7 @@ class _SignalKNotificationListener:
         *,
         allowed_paths: set[str],
         allow_all: bool,
+        ignored_prefixes: list[str],
         entities: dict[str, SignalKNotificationEvent] | None = None,
     ) -> None:
         self._coordinator = coordinator
@@ -119,12 +130,15 @@ class _SignalKNotificationListener:
         self._entities: dict[str, SignalKNotificationEvent] = entities or {}
         self._allowed_paths = allowed_paths
         self._allow_all = allow_all
+        self._ignored_prefixes = tuple(ignored_prefixes)
         # Path filtering keeps event entity creation explicit and bounded.
 
     @callback
     def handle_notification(self, event_data: dict[str, Any]) -> None:
         path = event_data.get("path")
         if not isinstance(path, str) or not path.startswith("notifications."):
+            return
+        if _is_ignored_path(path, self._ignored_prefixes):
             return
         if not self._allow_all and path not in self._allowed_paths:
             return
@@ -182,6 +196,10 @@ def _notification_name(path: str) -> str:
     if not label:
         return "Notification"
     return f"{label} Notification"
+
+
+def _is_ignored_path(path: str, prefixes: tuple[str, ...] | list[str]) -> bool:
+    return any(path.startswith(prefix) for prefix in prefixes)
 
 
 def _humanize_segment(segment: str) -> str:

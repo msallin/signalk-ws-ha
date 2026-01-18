@@ -34,6 +34,38 @@ def normalize_notification_paths(value: Any) -> list[str]:
     return normalized
 
 
+def normalize_notification_prefixes(value: Any) -> list[str]:
+    # Normalize prefix filters so path matching stays predictable.
+    if not value:
+        return []
+    if isinstance(value, str):
+        raw = value.replace(",", "\n").splitlines()
+    elif isinstance(value, (list, tuple, set)):
+        raw = list(value)
+    else:
+        return []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        prefix = item.strip()
+        if not prefix:
+            continue
+        if not prefix.startswith("notifications."):
+            prefix = f"notifications.{prefix}"
+        if prefix.endswith("*"):
+            prefix = prefix[:-1]
+        if prefix and not prefix.endswith("."):
+            prefix = f"{prefix}."
+        if prefix in seen:
+            continue
+        seen.add(prefix)
+        normalized.append(prefix)
+    return normalized
+
+
 def paths_to_text(paths: Iterable[str] | None) -> str:
     # Keep storage/UI round-trips stable by trimming and dropping empty lines.
     if not paths:

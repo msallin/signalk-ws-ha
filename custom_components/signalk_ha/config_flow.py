@@ -34,6 +34,7 @@ from .const import (
     CONF_GROUPS,
     CONF_HOST,
     CONF_INSTANCE_ID,
+    CONF_NOTIFICATION_IGNORE_PREFIXES,
     CONF_NOTIFICATION_PATHS,
     CONF_PORT,
     CONF_REFRESH_INTERVAL_HOURS,
@@ -46,6 +47,7 @@ from .const import (
     CONF_WS_URL,
     DEFAULT_ENABLE_NOTIFICATIONS,
     DEFAULT_GROUPS,
+    DEFAULT_NOTIFICATION_IGNORE_PREFIXES,
     DEFAULT_NOTIFICATION_PATHS,
     DEFAULT_PORT,
     DEFAULT_REFRESH_INTERVAL_HOURS,
@@ -54,7 +56,11 @@ from .const import (
     DOMAIN,
 )
 from .identity import build_instance_id, resolve_vessel_identity
-from .notifications import normalize_notification_paths, paths_to_text
+from .notifications import (
+    normalize_notification_paths,
+    normalize_notification_prefixes,
+    paths_to_text,
+)
 from .rest import (
     DiscoveryInfo,
     async_fetch_discovery,
@@ -339,6 +345,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_NOTIFICATION_PATHS: normalize_notification_paths(
                     user_input.get(CONF_NOTIFICATION_PATHS)
                 ),
+                CONF_NOTIFICATION_IGNORE_PREFIXES: normalize_notification_prefixes(
+                    user_input.get(
+                        CONF_NOTIFICATION_IGNORE_PREFIXES, DEFAULT_NOTIFICATION_IGNORE_PREFIXES
+                    )
+                ),
             }
             return await self._async_finish_setup(
                 host=self._pending_data[CONF_HOST],
@@ -363,6 +374,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_NOTIFICATION_PATHS,
                     default=paths_to_text(DEFAULT_NOTIFICATION_PATHS),
+                ): cv.string,
+                vol.Optional(
+                    CONF_NOTIFICATION_IGNORE_PREFIXES,
+                    default=paths_to_text(DEFAULT_NOTIFICATION_IGNORE_PREFIXES),
                 ): cv.string,
             }
         )
@@ -577,12 +592,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             notification_paths = normalize_notification_paths(
                 user_input.get(CONF_NOTIFICATION_PATHS)
             )
+            notification_prefixes = normalize_notification_prefixes(
+                user_input.get(
+                    CONF_NOTIFICATION_IGNORE_PREFIXES, DEFAULT_NOTIFICATION_IGNORE_PREFIXES
+                )
+            )
             return self.async_create_entry(
                 title="",
                 data={
                     CONF_REFRESH_INTERVAL_HOURS: hours,
                     CONF_ENABLE_NOTIFICATIONS: notifications_enabled,
                     CONF_NOTIFICATION_PATHS: notification_paths,
+                    CONF_NOTIFICATION_IGNORE_PREFIXES: notification_prefixes,
                     CONF_GROUPS: groups,
                 },
             )
@@ -600,6 +621,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         current_notification_paths = paths_to_text(
             self._entry.options.get(CONF_NOTIFICATION_PATHS, DEFAULT_NOTIFICATION_PATHS)
         )
+        current_notification_prefixes = paths_to_text(
+            self._entry.options.get(
+                CONF_NOTIFICATION_IGNORE_PREFIXES, DEFAULT_NOTIFICATION_IGNORE_PREFIXES
+            )
+        )
         group_options = _group_options()
         schema = vol.Schema(
             {
@@ -609,6 +635,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ): cv.boolean,
                 vol.Optional(
                     CONF_NOTIFICATION_PATHS, default=current_notification_paths
+                ): cv.string,
+                vol.Optional(
+                    CONF_NOTIFICATION_IGNORE_PREFIXES, default=current_notification_prefixes
                 ): cv.string,
                 vol.Optional(CONF_GROUPS, default=current_groups): cv.multi_select(group_options),
             }
